@@ -14,7 +14,7 @@ baseurl: '/online-cv' #change it according to your repository name
 
 #Profile information
 name: Lalet Scaria
-tagline: Masters Student
+tagline: Master's Student
 pic: profile.png  #place a 100x100 picture inside /assets/images/ folder and provide the name of the file below
 
 #sidebar links
