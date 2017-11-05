@@ -1,7 +1,7 @@
 
 title: My Resume
-url: 'http://lalet.github.io'
-baseurl: '/online-cv' #change it according to your repository name
+url: 'www.lalet.me'
+baseurl: '' #change it according to your repository name
 
 
 # Enable one of these styles by removing #. Style will be applied only after restarting the build or serve.
@@ -20,7 +20,7 @@ pic: profile.png  #place a 100x100 picture inside /assets/images/ folder and pro
 #sidebar links
 email: laletscaria+site@gmail.com
 phone: 514-295-24(eight)(eight)
-website: 'lalet.github.io/online-cv'  #do not add http://
+website: 'www.lalet.me'  #do not add http://
 linkedin: laletscaria
 github: lalet
 twitter: '@laletscaria'
