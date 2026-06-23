@@ -54,13 +54,36 @@ Right now ArgoCD keeps a small set of things in sync, all healthy:
 The short list is on purpose. I would rather have a few things rock solid than a
 sprawling dashboard of half-broken apps.
 
-## Secrets, briefly
+## Secrets, the SOPS way
 
-Secrets don't sit in Git as plaintext. They're encrypted with SOPS and an age
-key, so the repo can still be the source of truth without leaking anything.
-Wiring SOPS decryption cleanly into ArgoCD is still in progress on my side, and
-it's currently what's holding back a couple of apps. I'll write that part up
-when it's actually done instead of pretending it's finished.
+Secrets can't sit in Git as plaintext, but I still want them in the repo so it
+stays the one source of truth. The answer is SOPS with an age key: every secret
+file is encrypted in place, so what actually gets committed is ciphertext.
+
+ArgoCD decrypts them at render time with KSOPS, a plugin that runs inside
+ArgoCD's repo-server. An init container drops the KSOPS binary in alongside
+kustomize, and ArgoCD runs it as a generator, so when it builds the manifests
+the encrypted files come out decrypted and ready to apply. Exactly one secret is
+not in Git: the age private key itself, which I load into the cluster once by
+hand. Everything else flows from that.
+
+One detail I like: the secrets app doesn't pin a namespace. Each decrypted secret
+carries its own target namespace, so a single app fans secrets out to wherever
+they belong, like the cert-manager API token and the tunnel credentials.
+
+Two things ate an afternoon here:
+
+- The KSOPS container image ships without a shell, so the usual init-container
+  trick of running a `/bin/sh -c` command just crash-loops with "no such file".
+  You have to call the binary directly.
+- ArgoCD's command-params config map doesn't restart the affected pod when it
+  changes. After editing it you restart the deployment yourself, or run something
+  like Stakater Reloader to do it for you.
+
+Worth being honest about the tradeoff: ArgoCD caches rendered manifests,
+including the decrypted secrets, in Redis as plaintext. The project actively
+discourages this pattern for that reason. For a single-person private cluster I've
+accepted it, but I wouldn't run it this way anywhere with real blast radius.
 
 ## What bit me
 
