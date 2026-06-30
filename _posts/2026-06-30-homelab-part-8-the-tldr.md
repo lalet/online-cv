@@ -5,7 +5,7 @@ date: 2026-06-30
 tags: [homelab, kubernetes, talos, gitops, overview]
 ---
 
-Seven parts in, this thing is real and running, so here is the short version. One photo, one map, and a line on what each box actually does. The full story is linked at the bottom.
+Seven parts in, the thing is real and running, so here is the short version. One photo, one map, and a line on what each box does.
 
 <figure>
   <img src="{{ '/assets/images/homelab-hardware.jpg' | relative_url }}" alt="Two Raspberry Pi 5s on PoE hats, two Dell OptiPlex 3070 Micro PCs, and a Buffalo NAS on a shelf" loading="lazy">
