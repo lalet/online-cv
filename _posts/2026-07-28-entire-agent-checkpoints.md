@@ -31,6 +31,13 @@ Once it's turned on for a project, it just works in the background. A normal `gi
 
 It's also not tied to a single agent. Since the session data lives at the git layer rather than inside any one tool, work can hand off between different coding agents on the same project without starting that history over from nothing.
 
+Here's one real checkpoint from one of my own repos, viewed with a plain `git show --stat`. In plain terms: this is one saved memory, tagged to the session that made it, holding the actual back and forth (`transcript.jsonl`) plus the full raw record (`full.jsonl`) behind one specific piece of work. Nothing here touches the code itself. It's just proof that the reasoning got saved somewhere real instead of vanishing when the terminal closed.
+
+<figure>
+  <img src="{{ '/assets/images/entire-checkpoint.png' | relative_url }}" alt="Terminal output of git show --stat on an Entire checkpoint, showing files like transcript.jsonl and metadata.json tied to a session ID" loading="lazy">
+  <figcaption>One checkpoint, one saved memory, sitting quietly off to the side of the real commit history.</figcaption>
+</figure>
+
 ## Setting it up
 
 Turning it on for a project took about two minutes: install the CLI, point it at the coding agent I wanted it to track, and it was live. There was no config file to think through and no setting to second guess.
