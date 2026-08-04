@@ -5,17 +5,17 @@ date: 2026-08-04
 tags: [instagram, webhooks, automation, api, golang]
 ---
 
-Instagram captions aren't clickable, and a business account only gets one link, in its bio. If every post needs a different URL, the common workaround is the "comment LINK and I'll send it to you" pattern — you've almost certainly seen it. It's usually a human doing that by hand. It doesn't have to be. Instagram's own APIs cover the whole loop: a webhook tells you someone commented, and a private-reply endpoint lets you message them back referencing that exact comment. Here's how the pieces fit together.
+Instagram captions aren't clickable, and a business account only gets one link, in its bio. If every post needs a different URL, the common workaround is the "comment LINK and I'll send it to you" pattern. You've almost certainly seen it, usually run by a human typing it out one comment at a time. It doesn't have to be a person doing that. Instagram's own APIs cover the whole loop: a webhook tells you someone commented, and a private-reply endpoint lets you message them back referencing that exact comment.
 
 ## The shape of the problem
 
-Say you run an Instagram business account where every post should point somewhere different — a product, an article, a listing, whatever. Three things have to happen, in order, entirely server-side:
+Say you run an Instagram business account where every post should point somewhere different: a product, an article, a listing, whatever. Three things have to happen, in order, entirely server-side:
 
 1. Get told, in near-real-time, when someone comments on a specific post.
 2. Figure out what that post is actually supposed to link to.
 3. Send that person a DM containing the link, without them having to follow you or message first.
 
-Step 2 is on you — Instagram's webhook payload gives you a comment and the ID of the media it's on, nothing about what that media means to your business. You need your own mapping from media ID back to a URL, built at post-time. Steps 1 and 3 are Meta's Instagram Platform APIs, and they're the part worth writing up.
+Step 2 is on you. Instagram's webhook payload gives you a comment and the ID of the media it's on, nothing about what that media means to your business. You need your own mapping from media ID back to a URL, built at post time. Steps 1 and 3 are Meta's Instagram Platform APIs, and that's the part worth covering here.
 
 ## Step 1: Subscribe to comment events
 
@@ -26,7 +26,7 @@ curl -i -X POST \
   "https://graph.instagram.com/v25.0/<IG_USER_ID>/subscribed_apps?subscribed_fields=comments,messages&access_token=<ACCESS_TOKEN>"
 ```
 
-`comments` is what gets you notified when someone comments on a post. `messages` is worth subscribing to as well even if you're not handling inbound DMs yet — it's easy to subscribe once and forget it, then wonder later why a related feature silently gets no events.
+`comments` is what gets you notified when someone comments on a post. Subscribe to `messages` too even if you're not handling inbound DMs yet. It's easy to forget, and then wonder later why a related feature silently gets no events.
 
 ## Step 2: Handle the verification handshake
 
@@ -45,7 +45,7 @@ func handleWebhookVerify(w http.ResponseWriter, r *http.Request) {
 
 ## Step 3: Verify every real event is actually from Meta
 
-Once subscribed, every webhook delivery arrives as a `POST` with an `X-Hub-Signature-256` header — an HMAC-SHA256 of the raw request body, keyed with your app secret. If your webhook URL is public (it has to be, for Meta to reach it), anyone who finds it can `POST` a fake comment event unless you check this:
+Once subscribed, every webhook delivery arrives as a `POST` with an `X-Hub-Signature-256` header: an HMAC-SHA256 of the raw request body, keyed with your app secret. Your webhook URL has to be public for Meta to reach it, which means anyone who finds it can `POST` a fake comment event unless you check this:
 
 ```go
 func verifyMetaSignature(body []byte, signatureHeader string) bool {
@@ -63,7 +63,7 @@ func verifyMetaSignature(body []byte, signatureHeader string) bool {
 }
 ```
 
-`hmac.Equal` instead of `bytes.Equal` matters here — a naive byte comparison leaks timing information about how many leading bytes matched, which is a real (if narrow) side channel for forging a signature. Reject anything that doesn't verify before you even look at the payload.
+`hmac.Equal` instead of `bytes.Equal` matters here. A naive byte comparison leaks timing information about how many leading bytes matched, a real (if narrow) side channel for forging a signature. Reject anything that doesn't verify before you even look at the payload.
 
 ## Step 4: Parse the comment and decide whether to reply
 
@@ -91,7 +91,7 @@ type commentWebhookPayload struct {
 
 From here it's plain application logic: check `Field == "comments"`, check the comment text matches your trigger word, look up `Media.ID` in whatever mapping you built at post time, and bail out early (acking the webhook with `200` regardless, since Meta retries on anything else) if there's no match.
 
-One thing worth building in from the start: a per-commenter cooldown. Nothing stops someone from commenting your trigger word five times in a row, and without a cooldown you'll send five private replies for it. A simple in-memory `map[string]time.Time` keyed by the commenter's ID, checked against a cooldown window, is enough if your webhook handler runs as a single instance — a redeploy just resets everyone's cooldown, which is harmless.
+Build in a per-commenter cooldown from the start. Nothing stops someone from commenting your trigger word five times in a row, and without a cooldown you'll send five private replies for it. A simple in-memory `map[string]time.Time` keyed by the commenter's ID, checked against a cooldown window, is enough if your webhook handler runs as a single instance. A redeploy just resets everyone's cooldown, which is harmless.
 
 ## Step 5: Send the private reply
 
@@ -150,12 +150,12 @@ func sendPrivateReply(commentID, message string) error {
 
 A few constraints are easy to miss until they bite in production:
 
-- **7-day window.** You can only send the initial private reply within 7 days of the comment (or during a live broadcast). Comment on a month-old post and this silently won't work.
-- **Top-level comments only.** You can't target a reply-to-a-reply — Instagram folds those into the top-level comment automatically, so that's what you're actually replying against.
+- **7-day window.** You can only send the initial private reply within 7 days of the comment, or during a live broadcast. Comment on a month-old post and this silently won't work.
+- **Top-level comments only.** You can't target a reply to a reply. Instagram folds those into the top-level comment automatically, so that's what you're actually replying against.
 - **Live videos are excluded** from this specific flow; Meta's docs point at the general Messaging API for that case instead.
-- **One shot, then it's their move.** You get exactly one private reply per comment. A follow-up message is only allowed if the recipient responds first, and then only within 24 hours of that response — this isn't a channel for an ongoing conversation, it's a single nudge.
+- **One shot, then it's their move.** You get exactly one private reply per comment. A follow-up message only works if the recipient responds first, and then only within 24 hours of that response. This isn't a channel for an ongoing conversation. It's a single nudge.
 
-None of these are things you can code around — they're policy, not a bug in your integration — so they're worth designing for rather than discovering during an incident.
+None of these are things you can code around. They're policy, not a bug in your integration, so design for them instead of finding out the hard way during an incident.
 
 ## References
 
