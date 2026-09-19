@@ -68,7 +68,7 @@ Legacy workspace setup state requires migration.
 Turned out the setup step and the main process looked in different folders. I'd only mounted the config volume into the setup step, not the workspace or credentials volumes. So it fixed what it could see and missed the rest. I mounted all three the same way, and:
 
 ```
-[telegram] starting provider (@lalclawbot)
+[telegram] starting provider
 [telegram] isolated polling worker update received updateId=180306810 queued=25
 ```
 
