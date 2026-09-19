@@ -1,93 +1,74 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-36/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-36/" rel="alternate" type="text/html" /><updated>2026-09-19T02:21:58+00:00</updated><id>https://lalet.me/pr-preview/pr-36/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">Why I’ll Never Use :latest Again: A Homelab Postmortem</title><link href="https://lalet.me/pr-preview/pr-36/2026/09/19/zombie-bot-telegram-outage.html" rel="alternate" type="text/html" title="Why I’ll Never Use :latest Again: A Homelab Postmortem" /><published>2026-09-19T00:00:00+00:00</published><updated>2026-09-19T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-36/2026/09/19/zombie-bot-telegram-outage</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-36/2026/09/19/zombie-bot-telegram-outage.html"><![CDATA[<p>I asked my self-hosted assistant on Telegram to check something for me. Nothing came back. I assumed it was thinking, maybe stuck on a slow model call, and went back to what I was doing. A few minutes later I actually looked, and the timeline got uncomfortable fast: the bot hadn’t answered a single message in 79 days.</p>
-
-<p>Not crashed. Not restarting. Just quietly, permanently not there, the whole time I’d been telling people about it in <a href="/2026/07/01/openrouter-openclaw-telegram-setup.html">an earlier post</a>.</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-36/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-36/" rel="alternate" type="text/html" /><updated>2026-09-19T02:25:16+00:00</updated><id>https://lalet.me/pr-preview/pr-36/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">Why I’ll Never Use :latest Again: A Homelab Postmortem</title><link href="https://lalet.me/pr-preview/pr-36/2026/09/19/zombie-bot-telegram-outage.html" rel="alternate" type="text/html" title="Why I’ll Never Use :latest Again: A Homelab Postmortem" /><published>2026-09-19T00:00:00+00:00</published><updated>2026-09-19T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-36/2026/09/19/zombie-bot-telegram-outage</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-36/2026/09/19/zombie-bot-telegram-outage.html"><![CDATA[<p>I messaged my self-hosted assistant on Telegram and got nothing back. Figured it was thinking. When I actually checked, the truth was worse: it hadn’t answered anyone in 79 days.</p>
 
 <h2 id="finding-the-body">Finding the body</h2>
 
-<p><a href="https://openclaw.ai/">OpenClaw</a> ships its own CLI for checking channel health, so that was the first thing I ran:</p>
+<p><a href="https://openclaw.ai/">OpenClaw</a> has a CLI for this:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>openclaw channels status
 </code></pre></div></div>
 
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Telegram default: enabled, configured, stopped, disconnected,
-in:73d ago, out:79d ago, mode:polling,
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Telegram default: stopped, disconnected,
 error:channel stop timed out after 5000ms
 </code></pre></div></div>
 
-<p>That line explained everything and nothing at the same time. Somewhere in OpenClaw’s internals, a background health monitor had noticed the Telegram connection was down and tried to restart it. The restart needs to cleanly stop the old connection first. The stop never finished. So the health monitor waited, tried again, hit the same wall, and kept trying, forever, every fifteen minutes, for 79 days. Thousands of identical log lines, all saying “restarting,” none of them actually restarting anything.</p>
+<p>A background health monitor had been trying to restart the Telegram connection every fifteen minutes for 79 days straight, and failing every single time, silently. My Kubernetes health checks never caught it because they probe a <code class="language-plaintext highlighter-rouge">/healthz</code> endpoint that has nothing to do with Telegram. The pod was healthy. One feature inside it just wasn’t.</p>
 
-<p>My Kubernetes liveness and readiness probes never caught this because they check a <code class="language-plaintext highlighter-rouge">/healthz</code> endpoint that has nothing to do with Telegram. The pod was healthy. The process was fine. One specific feature inside it had just quietly wedged itself on day one and stayed that way.</p>
-
-<p>The fix seemed obvious: restart the pod. A brand new process doesn’t inherit a stuck connection, since it never made the connection in the first place.</p>
+<p>Obvious fix: restart the pod. A new process can’t inherit a stuck connection.</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>kubectl rollout restart deployment/openclaw
 </code></pre></div></div>
 
-<p>This is where it stopped being a five-minute fix.</p>
+<p>That’s where it stopped being a five-minute job.</p>
 
 <h2 id="restarting-into-a-landmine">Restarting into a landmine</h2>
 
-<p>My deployment pulls <code class="language-plaintext highlighter-rouge">ghcr.io/openclaw/openclaw:latest</code>. That had seemed reasonable back in July. Ten weeks is a long time for a project that ships often, though, and the restart quietly pulled a much newer image than the one that had been running.</p>
+<p>My deployment pulls <code class="language-plaintext highlighter-rouge">ghcr.io/openclaw/openclaw:latest</code>. Ten weeks had passed since the pod last restarted, and the restart quietly pulled a much newer image, one whose config validator rejected two settings the old version had written months earlier. Retired, not renamed. Even OpenClaw’s own repair command couldn’t run, since the CLI validates the whole config before it lets anything execute.</p>
 
-<p>The new version refused to start. Its config validator rejected two settings the old version had written months earlier, one of which I’d added myself. Both were gone from the new schema entirely, not renamed, just retired. The init step that was supposed to fix this up automatically (<code class="language-plaintext highlighter-rouge">openclaw doctor --fix</code>) hit the same wall trying to run, because the CLI validates the whole config file before it lets any command run, doctor included.</p>
-
-<p>Fine, I thought. Roll back to the exact version that had been working for 79 days. I found the old tag, pinned both containers to it, and redeployed.</p>
-
-<p>New error. Worse one.</p>
+<p>So I rolled back to the exact version that had been working for 79 days. New error, worse one:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>OpenClaw state database uses newer schema version 17;
 this OpenClaw build supports 1.
 </code></pre></div></div>
 
-<p>Here’s the part that actually surprised me. Just attempting to run a command with the newer binary, even the one that failed and exited immediately, had already touched the app’s local database and upgraded its internal format on the way in. That upgrade doesn’t reverse. The old binary can open a version-1 database and nothing newer. Once anything writes version 17 into it, there is no version of the old software that can read it again. I hadn’t broken anything by trying to fix it. I’d broken the exit.</p>
-
-<p>So there was only one direction left: forward, onto whatever the new version actually needed to run.</p>
+<p>Just running the newer binary, even the attempt that failed, had already upgraded the local database’s internal format on the way in. That upgrade doesn’t reverse. I hadn’t broken anything by trying to fix it. I’d broken the exit. Forward was the only direction left.</p>
 
 <h2 id="the-permission-error-that-made-no-sense">The permission error that made no sense</h2>
 
-<p>Pinned to the new version for real this time, with the two retired config keys stripped out first. Init container started, ran its setup script, and died on this:</p>
+<p>Pinned to the new version for good, retired config keys stripped out. It died on:</p>
 
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Doctor could not complete maintenance.
-EPERM: operation not permitted, fchmod
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>EPERM: operation not permitted, fchmod
 </code></pre></div></div>
 
-<p>No file name. No path. Just a bare permission error from a container that, as far as I could tell, owned every file it was touching.</p>
+<p>No file, no path, just that. I kept the init container alive on a plain <code class="language-plaintext highlighter-rouge">sleep</code> so I could shell in and look around. Every file was owned correctly. The directory holding them wasn’t, root, mode 755, and the container ran unprivileged.</p>
 
-<p>I ended up patching the deployment to keep the init container alive on a plain <code class="language-plaintext highlighter-rouge">sleep</code> command instead of its real one, so I could shell into it and poke around by hand rather than guessing from the outside. Every file inside the config volume was owned correctly. The directory itself was not. It belonged to root, mode 755, and the container ran as a regular unprivileged user.</p>
+<p>I’d set <code class="language-plaintext highlighter-rouge">fsGroup: 1000</code> specifically to prevent this, and it usually works. What I hadn’t accounted for: my persistent volumes run on <a href="https://github.com/rancher/local-path-provisioner">local-path-provisioner</a>, basically a directory on a node’s disk wearing a Kubernetes costume, and Kubernetes skips the automatic ownership fix for that storage type. The volume had been root-owned since the day it was created. Nothing had ever needed to change its permissions until now.</p>
 
-<p>I’d set <code class="language-plaintext highlighter-rouge">fsGroup: 1000</code> in the pod’s security settings specifically to fix this class of problem, and it usually does. What I hadn’t accounted for is that <code class="language-plaintext highlighter-rouge">fsGroup</code> only reaches certain kinds of storage. My cluster’s persistent volumes are backed by <a href="https://github.com/rancher/local-path-provisioner">local-path-provisioner</a>, which is really just a directory on a node’s disk wearing a Kubernetes costume, and Kubernetes skips the automatic ownership fix for that storage type. The volume had been root-owned since the day it was created. It had never mattered before, because nothing had ever tried to change its permissions until this exact upgrade step came along.</p>
-
-<p>An unprivileged container can create and delete files inside a directory it doesn’t own, as long as the directory itself allows it. It just can’t change who owns the directory. That takes an actual privilege the container didn’t have.</p>
-
-<p>The fix was a small extra step at the very front of startup: one more init container that runs briefly as root, with every capability stripped except the one that actually does the chowning, fixes ownership on the volumes, and exits. Everything downstream keeps running as the regular unprivileged user like before.</p>
+<p>A container can create files in a directory it doesn’t own, as long as the directory allows it. It can’t change who owns the directory. That needs an actual privilege it didn’t have. The fix: one more init container up front, briefly root, one capability, chown the volumes, exit.</p>
 
 <h2 id="one-more-wall-then-it-worked">One more wall, then it worked</h2>
 
-<p>Fixed the ownership, redeployed, watched the setup step run all the way through this time, migrating an old session file into its new format, rebuilding a plugin index, converting some cached data. Real progress. Then the main process itself failed to start:</p>
+<p>Fixed the ownership. The setup step ran clean this time, migrated an old session file, rebuilt a plugin index. Then the main process failed anyway:</p>
 
 <div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>Legacy workspace setup state requires migration.
-Run "openclaw doctor --fix".
 </code></pre></div></div>
 
-<p>I’d already run that. Turned out the setup step and the main process weren’t looking at the same set of folders. The bot has separate storage for its config, its workspace, and its saved credentials, and I’d only ever mounted the config one into the setup step. It patched what it could see and had no idea the other two existed. Mounting all three the same way fixed it for good.</p>
+<p>Turned out the setup step and the main process weren’t looking at the same folders. I’d only mounted the config volume into the setup step, not the workspace or credentials volumes, so it fixed what it could see and missed the rest. Mounted all three the same way, and:</p>
 
-<p>Watched the logs. Gateway started. Plugins loaded. Then, finally:</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[telegram] [default] starting provider (@lalclawbot)
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>[telegram] starting provider (@lalclawbot)
 [telegram] isolated polling worker update received updateId=180306810 queued=25
 </code></pre></div></div>
 
-<p>Twenty-five messages, queued up and waiting, some of them mine.</p>
+<p>Twenty-five messages, queued up and waiting.</p>
 
 <h2 id="what-id-tell-past-me">What I’d tell past me</h2>
 
-<p>Pin your image tags. Really pin them, not “latest is basically pinned because I don’t restart often.” The version that had been running quietly for 79 days and the version I restarted into were separated by ten weeks and turned out to be two different, mutually incompatible programs wearing the same name.</p>
+<p>Pin your image tags for real, not “latest is basically pinned because I don’t restart often.” Ten weeks turned it into two incompatible programs sharing a name.</p>
 
-<p>Treat a version bump on anything with a persistent database as a one-way door until proven otherwise. I got lucky that forward was survivable. I would not have gotten lucky rolling back a production database.</p>
+<p>Treat any version bump on something with a persistent database as one-way until proven otherwise. Forward happened to be survivable. Rolling back a production database might not be.</p>
 
-<p>And if you’re using <a href="https://argo-cd.readthedocs.io/">ArgoCD</a> with self-healing turned on, know what you’re fighting. Any live <code class="language-plaintext highlighter-rouge">kubectl</code> edit I made to test a theory got reverted within seconds, the moment ArgoCD noticed it didn’t match what was committed. That’s the entire point of the tool and I wouldn’t turn it off, but it means real fixes only stick once they’re actually merged. The one exception worth knowing: a filesystem change like the ownership fix survives even after the pod spec that made it gets reverted, since ArgoCD only manages the Kubernetes objects, not what already happened on disk. That let me confirm each fix actually worked before writing it into a pull request for real, which is exactly backwards from how I’d normally want to test something, and also exactly what saved me from merging four more guesses.</p>
+<p>And if <a href="https://argo-cd.readthedocs.io/">ArgoCD</a> self-heals for you, know it reverts a live <code class="language-plaintext highlighter-rouge">kubectl</code> edit within seconds of noticing it doesn’t match git. Real fixes only stick once merged. The one loophole: a filesystem change like the ownership fix survives even after ArgoCD reverts the pod spec that made it, which let me verify each fix worked before writing it into a pull request instead of guessing.</p>
 
-<p>Four small pull requests later, the bot was talking to me again like nothing had happened. It had, for 79 days. I just hadn’t been paying attention, which might be the actual moral of this whole thing.</p>]]></content><author><name>Lalet Scaria</name></author><category term="openclaw" /><category term="kubernetes" /><category term="argocd" /><category term="telegram" /><category term="selfhosted" /><summary type="html"><![CDATA[I asked my self-hosted assistant on Telegram to check something for me. Nothing came back. I assumed it was thinking, maybe stuck on a slow model call, and went back to what I was doing. A few minutes later I actually looked, and the timeline got uncomfortable fast: the bot hadn’t answered a single message in 79 days.]]></summary></entry><entry><title type="html">Comment LINK, Get a DM: Automating Instagram’s Private Replies</title><link href="https://lalet.me/pr-preview/pr-36/2026/08/04/instagram-comment-to-dm-automation.html" rel="alternate" type="text/html" title="Comment LINK, Get a DM: Automating Instagram’s Private Replies" /><published>2026-08-04T00:00:00+00:00</published><updated>2026-08-04T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-36/2026/08/04/instagram-comment-to-dm-automation</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-36/2026/08/04/instagram-comment-to-dm-automation.html"><![CDATA[<p>Instagram captions aren’t clickable, and a business account only gets one link, in its bio. If every post needs a different URL, the common workaround is the “comment LINK and I’ll send it to you” pattern. You’ve almost certainly seen it, usually run by a human typing it out one comment at a time. It doesn’t have to be a person doing that. Instagram’s own APIs cover the whole loop: a webhook tells you someone commented, and a private-reply endpoint lets you message them back referencing that exact comment.</p>
+<p>Four small pull requests later, the bot was talking to me again. It had been fine to talk to for 79 days. I just hadn’t been listening.</p>]]></content><author><name>Lalet Scaria</name></author><category term="openclaw" /><category term="kubernetes" /><category term="argocd" /><category term="telegram" /><category term="selfhosted" /><summary type="html"><![CDATA[I messaged my self-hosted assistant on Telegram and got nothing back. Figured it was thinking. When I actually checked, the truth was worse: it hadn’t answered anyone in 79 days.]]></summary></entry><entry><title type="html">Comment LINK, Get a DM: Automating Instagram’s Private Replies</title><link href="https://lalet.me/pr-preview/pr-36/2026/08/04/instagram-comment-to-dm-automation.html" rel="alternate" type="text/html" title="Comment LINK, Get a DM: Automating Instagram’s Private Replies" /><published>2026-08-04T00:00:00+00:00</published><updated>2026-08-04T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-36/2026/08/04/instagram-comment-to-dm-automation</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-36/2026/08/04/instagram-comment-to-dm-automation.html"><![CDATA[<p>Instagram captions aren’t clickable, and a business account only gets one link, in its bio. If every post needs a different URL, the common workaround is the “comment LINK and I’ll send it to you” pattern. You’ve almost certainly seen it, usually run by a human typing it out one comment at a time. It doesn’t have to be a person doing that. Instagram’s own APIs cover the whole loop: a webhook tells you someone commented, and a private-reply endpoint lets you message them back referencing that exact comment.</p>
 
 <h2 id="the-shape-of-the-problem">The shape of the problem</h2>
 
