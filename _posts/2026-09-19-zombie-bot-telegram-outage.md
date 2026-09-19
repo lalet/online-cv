@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Zombie Bot: My Telegram Assistant Was Dead for 79 Days and Didn't Tell Anyone"
+title: "Why I'll Never Use :latest Again: A Homelab Postmortem"
 date: 2026-09-19
 tags: [openclaw, kubernetes, argocd, telegram, selfhosted]
 ---
