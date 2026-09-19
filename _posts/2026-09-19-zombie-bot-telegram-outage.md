@@ -5,6 +5,8 @@ date: 2026-09-19
 tags: [openclaw, kubernetes, argocd, telegram, selfhosted]
 ---
 
+**TLDR:** My Telegram bot stopped working without telling anyone. A pod restart pulled a new `:latest` image that broke on old settings. Rolling back failed because the database had already upgraded and can't go backward. Fixing forward meant dealing with a permissions bug from my storage class, then a gap where two init steps weren't sharing all the same mount points. Four small pull requests fixed it all. Lesson: use exact image tags, not `:latest`. Treat any database change as one-way.
+
 I sent a message to my self-hosted assistant on Telegram and got no reply. I thought it was just thinking. When I checked, the truth was worse: it hadn't answered anyone in 79 days.
 
 ## Finding the body
