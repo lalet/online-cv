@@ -35,6 +35,8 @@ jobs:
         if: github.event.action != 'closed'
         run: bundle exec jekyll build -d ./_site/ --baseurl "/pr-preview/pr-${{ github.event.number }}"
 
+      # PAT so this push cascade-triggers deploy-pages.yml (GITHUB_TOKEN pushes don't).
       - uses: rossjrw/pr-preview-action@v1
         with:
           source-dir: ./_site/
+          token: ${{ secrets.PREVIEW_PAT }}
