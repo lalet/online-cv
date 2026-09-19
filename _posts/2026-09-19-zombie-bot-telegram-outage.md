@@ -75,8 +75,8 @@ Turned out the setup step and the main process looked in different folders. I'd 
 Twenty-five messages, queued up and waiting. The bot's actual first name, it turns out, is Rocky. Feels about right for something that got knocked out on day one and didn't get back up for 79 days.
 
 <figure>
-  <img src="https://media.giphy.com/media/yoJC2JaiEMoxIhQhY4/giphy.gif" alt="Sylvester Stallone as Rocky celebrating a win, arms raised" loading="lazy">
-  <figcaption>My OpenClaw bot's real name is Rocky. I did not plan this.</figcaption>
+  <img src="https://media.giphy.com/media/vP6B55t5F41koebdvO/giphy.gif" alt="Rocky the alien from Project Hail Mary waving hello" loading="lazy">
+  <figcaption>My OpenClaw bot's real name is Rocky, like the one from Project Hail Mary. I did not plan this.</figcaption>
 </figure>
 
 ## What I'd tell past me
