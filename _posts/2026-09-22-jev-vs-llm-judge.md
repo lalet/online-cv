@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Jev vs. LLM-as-Judge: Getting on the Hype Train"
+title: "I Boarded the Jev Hype Train, Then Made It Prove Itself"
 date: 2026-09-22
 tags: [ai, rag, llm-as-judge, evaluation]
 ---
