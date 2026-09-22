@@ -35,9 +35,13 @@ Each one went to both judges, for real, in the same run:
 
 Jev's ten calls averaged 227ms (median 158ms; the first call was slow at 839ms, likely a cold connection, the rest ran 100-270ms). The LLM judge averaged 962ms (median 874ms). Skipping token generation and JSON parsing shows up directly in the wall-clock time: roughly **4-5x faster** on identical inputs.
 
-On eight of the ten cases, both judges agreed on which way an answer leaned, high or low, on both dimensions. The exception was the off-topic-but-true answer (answering "what's the capital of France?" with population and location instead). Jev scored its faithfulness at 0.02, basically "not grounded," with 0.97 confidence. The LLM judge gave it a 5, "fully grounded." That's not a difference of degree, it's the opposite verdict.
+On eight of the ten cases, both judges landed on the same verdict, even when the exact numbers differed. On one, they flatly disagreed.
 
-Here's my best guess at why: the LLM judge seems to treat "faithful" as "not wrong," so a true fact slides through even when it's beside the point. Jev asked a narrower question: is this backed up by the specific passage it was given? That passage never says a word about population or location, so by that stricter rule, it doesn't matter that the fact is true elsewhere, it just isn't in this context. Same word, two different tests. Worth remembering before you swap one judge for the other and assume "faithful" means the same thing to both.
+That case: I asked "what's the capital of France?" and gave it an answer about France's population and location instead, no mention of Paris anywhere. That's a true answer, it just doesn't answer the question. Jev scored it 0.02 on faithfulness, basically "not grounded at all," and was 97% sure of it. The LLM judge scored the same answer a perfect 5, "fully grounded." Not a small gap, the opposite verdict.
+
+Think of it like a closed-book exam where the context passage is the one page you're allowed to use. Jev's question was strict: is everything in this answer actually written on that page? The page never mentions population or location, so as far as Jev's concerned, the answer isn't grounded, full stop, regardless of whether it happens to be true in real life. The LLM judge asked a looser question without meaning to: is anything in this answer factually wrong? Since France's population and location are both true, it waved the answer through, even though neither fact was actually on the page it was handed.
+
+Same word, "faithful," two different exams. Worth knowing before you swap one judge for the other and assume a passing score means the same thing from both.
 
 Jev also returns a confidence value per answer, based on how concentrated its probability distribution is, and it's a genuinely useful signal. Across all 20 scores in this run (10 cases × 2 dimensions), the three lowest were:
 
