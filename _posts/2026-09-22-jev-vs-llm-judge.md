@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Jev vs. LLM-as-Judge: A Practical Comparison"
+title: "Jev vs. LLM-as-Judge: Getting on the Hype Train"
 date: 2026-09-22
 tags: [ai, rag, llm-as-judge, evaluation]
 ---
