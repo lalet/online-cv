@@ -33,21 +33,21 @@ Each one went to both judges, for real, in the same run:
 
 ## What actually happened
 
-**Latency.** Jev's ten calls averaged 227ms (median 158ms; the first call was slow at 839ms, likely a cold connection, the rest ran 100-270ms). The LLM judge averaged 962ms (median 874ms). That's roughly **4-5x faster** on identical inputs, no token generation and no JSON to parse shows up directly in the wall-clock time.
+Jev's ten calls averaged 227ms (median 158ms; the first call was slow at 839ms, likely a cold connection, the rest ran 100-270ms). The LLM judge averaged 962ms (median 874ms). Skipping token generation and JSON parsing shows up directly in the wall-clock time: roughly **4-5x faster** on identical inputs.
 
-**Direction mostly matched, with one genuine exception.** On eight of the ten cases, both judges agreed on which way an answer leaned, high or low, on both dimensions. The exception: the off-topic-but-true answer (answering "what's the capital of France?" with population and location instead). Jev scored its faithfulness at 0.02, basically "not grounded," with 0.97 confidence. The LLM judge gave it a 5, "fully grounded." That's not a difference of degree, it's the opposite verdict.
+On eight of the ten cases, both judges agreed on which way an answer leaned, high or low, on both dimensions. The exception was the off-topic-but-true answer (answering "what's the capital of France?" with population and location instead). Jev scored its faithfulness at 0.02, basically "not grounded," with 0.97 confidence. The LLM judge gave it a 5, "fully grounded." That's not a difference of degree, it's the opposite verdict.
 
-I think I know why: the LLM judge seems to read "faithful" as "not factually wrong," so a true-but-irrelevant fact passes. Jev's question was explicitly about groundedness *in the provided context*, and the context passage never mentions population or location at all. So by that stricter reading it's ungrounded regardless of whether the claim is independently true. Same word, two different tests. That's worth knowing if you're swapping one judge for the other and expecting the criteria to mean the same thing.
+I think I know why: the LLM judge seems to read "faithful" as "not factually wrong," so a true-but-irrelevant fact passes. Jev's question was explicitly about groundedness *in the provided context*, and the context passage never mentions population or location at all, so by that stricter reading it's ungrounded regardless of whether the claim is independently true. Same word, two different tests, worth knowing if you're swapping one judge for the other and expecting the criteria to mean the same thing.
 
-**The confidence signal is real, and it pointed at the right cases.** Jev returns a confidence value per answer, based on how concentrated its probability distribution is. Across all 20 scores in this run (10 cases × 2 dimensions), the three lowest were:
+Jev also returns a confidence value per answer, based on how concentrated its probability distribution is, and it's a genuinely useful signal. Across all 20 scores in this run (10 cases × 2 dimensions), the three lowest were:
 
 - The compound-answer case's faithfulness score: **0.27** (its probabilities split almost evenly, 0.51 vs. 0.49, between "not grounded" and "partially grounded")
 - The wrong-unit case's relevancy score: **0.30**
 - The compound-answer case's relevancy score: **0.39**
 
-Both of those cases are genuinely ambiguous by design: is substituting one correct-sounding color for another in a three-part answer "partially grounded" or just wrong? Does a wrong number that's still on-topic count as fully addressing the question? Jev didn't resolve that ambiguity by picking a side confidently. It flagged it. Every other case landed at 0.68 confidence or higher. A bare integer score from an LLM judge can't tell you which of its answers it was actually unsure about. A confidently-wrong 1/5 looks identical to a genuinely-torn 1/5.
+Both of those cases are genuinely ambiguous by design: is substituting one correct-sounding color for another in a three-part answer "partially grounded" or just wrong? Does a wrong number that's still on-topic count as fully addressing the question? Jev didn't resolve that ambiguity by picking a side confidently, it flagged it. Every other case landed at 0.68 confidence or higher. A bare integer score from an LLM judge can't tell you which of its answers it was actually unsure about; a confidently-wrong 1/5 looks identical to a genuinely-torn 1/5.
 
-**The LLM judge's free-text notes are still useful.** Where the LLM judge earned its keep was in the "notes" field. On the compound-answer case it wrote "contradicts the retrieved context by stating green instead of yellow." On the wrong-unit case it named the exact number that was off. Jev returns numbers and a legend, no prose. If a human needs to understand *why* something was flagged, that context still has to come from somewhere.
+Where the LLM judge earned its keep was the "notes" field. On the compound-answer case it wrote "contradicts the retrieved context by stating green instead of yellow." On the wrong-unit case it named the exact number that was off. Jev returns numbers and a legend, no prose, so if a human needs to understand why something was flagged, that explanation still has to come from somewhere else.
 
 ## The math, with a real example
 
