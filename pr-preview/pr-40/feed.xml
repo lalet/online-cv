@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-40/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-40/" rel="alternate" type="text/html" /><updated>2026-09-22T06:30:13+00:00</updated><id>https://lalet.me/pr-preview/pr-40/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">I Boarded the Jev Hype Train, Then Made It Prove Itself</title><link href="https://lalet.me/pr-preview/pr-40/2026/09/22/jev-vs-llm-judge.html" rel="alternate" type="text/html" title="I Boarded the Jev Hype Train, Then Made It Prove Itself" /><published>2026-09-22T00:00:00+00:00</published><updated>2026-09-22T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-40/2026/09/22/jev-vs-llm-judge</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-40/2026/09/22/jev-vs-llm-judge.html"><![CDATA[<p>Most RAG (Retrieval-Augmented Generation) systems score answers two ways: faithfulness (is it based on the retrieved text, or made up?) and relevancy (does it actually answer the question?). The standard approach is a second LLM call that returns <code class="language-plaintext highlighter-rouge">{"faithfulness": 1-5, "relevancy": 1-5}</code> as JSON. I wanted to test this against a purpose-built scoring model instead.</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-40/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-40/" rel="alternate" type="text/html" /><updated>2026-09-22T06:34:25+00:00</updated><id>https://lalet.me/pr-preview/pr-40/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">I Boarded the Jev Hype Train, Then Made It Prove Itself</title><link href="https://lalet.me/pr-preview/pr-40/2026/09/22/jev-vs-llm-judge.html" rel="alternate" type="text/html" title="I Boarded the Jev Hype Train, Then Made It Prove Itself" /><published>2026-09-22T00:00:00+00:00</published><updated>2026-09-22T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-40/2026/09/22/jev-vs-llm-judge</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-40/2026/09/22/jev-vs-llm-judge.html"><![CDATA[<p>Most RAG (Retrieval-Augmented Generation) systems score answers two ways: faithfulness (is it based on the retrieved text, or made up?) and relevancy (does it actually answer the question?). The standard approach is a second LLM call that returns <code class="language-plaintext highlighter-rouge">{"faithfulness": 1-5, "relevancy": 1-5}</code> as JSON. I wanted to test this against a purpose-built scoring model instead.</p>
 
 <h2 id="what-im-comparing">What I’m comparing</h2>
 
@@ -20,6 +20,45 @@
   <li>A compound answer where one part out of three is wrong</li>
   <li>A subjective question with no ground truth</li>
 </ul>
+
+<p>A few of the actual pairs, so you can see what “context” and “answer” mean here:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Case</th>
+      <th>Question</th>
+      <th>Context given</th>
+      <th>Answer being scored</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Hallucination</td>
+      <td>Who invented the telephone and when?</td>
+      <td>Alexander Graham Bell is credited with patenting the first practical telephone in 1876.</td>
+      <td>The telephone was invented by Thomas Edison in 1879.</td>
+    </tr>
+    <tr>
+      <td>Off-topic but true</td>
+      <td>What is the capital of France?</td>
+      <td>Paris is the capital and most populous city of France.</td>
+      <td>France has a population of about 68 million people and is located in Western Europe.</td>
+    </tr>
+    <tr>
+      <td>Wrong unit</td>
+      <td>How long does it take light from the Sun to reach Earth?</td>
+      <td>Light takes approximately 8 minutes and 20 seconds (about 500 seconds) to travel from the Sun to Earth.</td>
+      <td>It takes about 500 hours for sunlight to reach Earth.</td>
+    </tr>
+    <tr>
+      <td>Compound, 2/3 correct</td>
+      <td>Name the three primary colors in traditional color theory.</td>
+      <td>In traditional (subtractive) color theory, the primary colors are red, yellow, and blue.</td>
+      <td>The three primary colors are red, yellow, and green.</td>
+    </tr>
+  </tbody>
+</table>
 
 <p>Each one went to both judges in the same run:</p>
 
