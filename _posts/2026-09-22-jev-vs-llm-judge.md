@@ -26,6 +26,15 @@ I created ten question/context/answer pairs, each testing a different problem a 
 - A compound answer where one part out of three is wrong
 - A subjective question with no ground truth
 
+A few of the actual pairs, so you can see what "context" and "answer" mean here:
+
+| Case | Question | Context given | Answer being scored |
+| --- | --- | --- | --- |
+| Hallucination | Who invented the telephone and when? | Alexander Graham Bell is credited with patenting the first practical telephone in 1876. | The telephone was invented by Thomas Edison in 1879. |
+| Off-topic but true | What is the capital of France? | Paris is the capital and most populous city of France. | France has a population of about 68 million people and is located in Western Europe. |
+| Wrong unit | How long does it take light from the Sun to reach Earth? | Light takes approximately 8 minutes and 20 seconds (about 500 seconds) to travel from the Sun to Earth. | It takes about 500 hours for sunlight to reach Earth. |
+| Compound, 2/3 correct | Name the three primary colors in traditional color theory. | In traditional (subtractive) color theory, the primary colors are red, yellow, and blue. | The three primary colors are red, yellow, and green. |
+
 Each one went to both judges in the same run:
 
 - **The LLM judge**: `anthropic/claude-haiku-4.5` via OpenRouter, asked to return the JSON scores above.
