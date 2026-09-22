@@ -1,15 +1,13 @@
 ---
 layout: post
-title: "Jev vs. LLM-as-Judge: The Real Numbers, Not the Ones I Started With"
+title: "Jev vs. LLM-as-Judge: A Practical Comparison"
 date: 2026-09-22
 tags: [ai, rag, llm-as-judge, evaluation]
 ---
 
-I started with a full comparison already written for me: ten test cases, a 10x latency win, a claim that both judges agreed on every single case. It looked great. I ran it for real anyway, since I don't trust numbers I didn't measure myself enough to put on this blog. The real results are messier and, honestly, more interesting.
+Most RAG (Retrieval-Augmented Generation) pipelines score a generated answer on two things: faithfulness (is it based on the retrieved context, or made up?) and relevancy (does it actually answer the question?). The standard way to do that is a second LLM call, asked to return `{"faithfulness": 1-5, "relevancy": 1-5}` as JSON. I wanted to see how that compares, in practice, against a purpose-built scoring model instead of a generation model repurposed for the job.
 
 ## What I'm comparing
-
-Most RAG pipelines score a generated answer on two things: faithfulness (is it based on the retrieved context, or made up?) and relevancy (does it actually answer the question?). The standard way is a second LLM call, asked to return `{"faithfulness": 1-5, "relevancy": 1-5}` as JSON.
 
 [Jev](https://typesafe.ai/), from TypeSafe AI, does this differently. It's a non-autoregressive model, what they call a "System One" model. It takes a block of information and a set of typed questions and returns a probability distribution over a fixed set of answers directly. No token generation, no JSON to parse. TypeSafe trains it with [RLCD, Reinforcement Learning for Calibrated Decisions](https://typesafe.ai/blog/introducing-system-one-models-and-jev). This is a different goal from the usual RLHF: if the model says "90% confident," it should actually be right 90% of the time.
 
@@ -35,7 +33,7 @@ Each one went to both judges, for real, in the same run:
 
 ## What actually happened
 
-**Latency.** Jev's ten calls averaged 227ms (median 158ms; the first call was slow at 839ms, likely a cold connection, the rest ran 100-270ms). The LLM judge averaged 962ms (median 874ms). That's roughly **4-5x faster**, not 10x. Still a real, structural difference, just not the number I was handed.
+**Latency.** Jev's ten calls averaged 227ms (median 158ms; the first call was slow at 839ms, likely a cold connection, the rest ran 100-270ms). The LLM judge averaged 962ms (median 874ms). That's roughly **4-5x faster** on identical inputs, no token generation and no JSON to parse shows up directly in the wall-clock time.
 
 **Direction mostly matched, with one genuine exception.** On eight of the ten cases, both judges agreed on which way an answer leaned, high or low, on both dimensions. The exception: the off-topic-but-true answer (answering "what's the capital of France?" with population and location instead). Jev scored its faithfulness at 0.02, basically "not grounded," with 0.97 confidence. The LLM judge gave it a 5, "fully grounded." That's not a difference of degree, it's the opposite verdict.
 
@@ -67,4 +65,4 @@ This matches what came back (1.84, off by float rounding). `confidence` is a sep
 
 ## Takeaway
 
-The directional agreement and the confidence signal both held up under a real run. That part of the pitch is genuine. The specific numbers I was first given weren't: the real speedup is closer to 4-5x than 10x, and the judges didn't agree on everything. They disagreed once, in a way that reveals a real definitional gap between "factually true" and "grounded in this context." For a bounded scoring step like this, I'd reach for a typed-decision model over a second LLM call. I'd route anything under about 0.5 confidence to a human or a fallback LLM pass for the explanation. I just wouldn't have known any of that without running it myself.
+For a bounded scoring step like this, faithfulness and relevancy on a fixed scale, a typed-decision model is a better architectural fit than reusing a generation model as judge: same directional judgments in almost every case, several times faster, and a genuine confidence signal for triaging what needs a closer look. The one real gap is the definitional one: "faithful" meant something different to each judge on the off-topic case, worth resolving explicitly before trusting either one blindly. My own rule from this: route anything under about 0.5 confidence to a human, or to a fallback LLM pass when the explanation matters more than the score.
