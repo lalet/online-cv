@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-41/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-41/" rel="alternate" type="text/html" /><updated>2026-09-29T03:13:30+00:00</updated><id>https://lalet.me/pr-preview/pr-41/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">Teaching Rocky to Watch the Cluster</title><link href="https://lalet.me/pr-preview/pr-41/2026/09/29/teaching-rocky-to-watch-the-cluster.html" rel="alternate" type="text/html" title="Teaching Rocky to Watch the Cluster" /><published>2026-09-29T00:00:00+00:00</published><updated>2026-09-29T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-41/2026/09/29/teaching-rocky-to-watch-the-cluster</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-41/2026/09/29/teaching-rocky-to-watch-the-cluster.html"><![CDATA[<p><strong>TLDR:</strong> I gave Rocky, my self-hosted Telegram bot, read-only access to my Kubernetes cluster so it could flag actual problems instead of me finding out the hard way. Four bugs stood between writing the config and a single <code class="language-plaintext highlighter-rouge">kubectl get pods</code> working: a missing binary, a config file that silently reset itself, a firewall rule checking the wrong port, and a permission that didn’t cover what I thought it did.</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-41/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-41/" rel="alternate" type="text/html" /><updated>2026-09-29T03:17:00+00:00</updated><id>https://lalet.me/pr-preview/pr-41/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">Teaching Rocky to Watch the Cluster</title><link href="https://lalet.me/pr-preview/pr-41/2026/09/29/teaching-rocky-to-watch-the-cluster.html" rel="alternate" type="text/html" title="Teaching Rocky to Watch the Cluster" /><published>2026-09-29T00:00:00+00:00</published><updated>2026-09-29T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-41/2026/09/29/teaching-rocky-to-watch-the-cluster</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-41/2026/09/29/teaching-rocky-to-watch-the-cluster.html"><![CDATA[<p><strong>TLDR:</strong> I gave Rocky, my self-hosted Telegram bot, read-only access to my Kubernetes cluster so it could flag actual problems instead of me finding out the hard way. Four bugs stood between writing the config and a single <code class="language-plaintext highlighter-rouge">kubectl get pods</code> working: a missing binary, a config file that silently reset itself, a firewall rule checking the wrong port, and a permission that didn’t cover what I thought it did.</p>
 
 <p>Rocky already opens pull requests on my GitHub repo. Giving it read access to the cluster felt like the obvious next step. I figured it was an afternoon of work: a read-only role, a Kubernetes-flavored tool plugin, done by dinner.</p>
 
@@ -19,9 +19,21 @@
 
 <p>Fix: an init container downloads a static binary onto a shared volume, and <code class="language-plaintext highlighter-rouge">PATH</code> gets extended to include it. The shared directory couldn’t be <code class="language-plaintext highlighter-rouge">/usr/local/bin</code>, though: that’s where the base image keeps <code class="language-plaintext highlighter-rouge">node</code>, <code class="language-plaintext highlighter-rouge">npm</code>, and Rocky’s own binary, and mounting a volume there wipes the whole directory instead of adding to it. Found that one by breaking the container outright.</p>
 
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">initContainers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">install-kubectl</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">curlimages/curl</span>
+    <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">sh"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">curl</span><span class="nv"> </span><span class="s">-sfL</span><span class="nv"> </span><span class="s">https://dl.k8s.io/release/v1.35.6/bin/linux/amd64/kubectl</span><span class="nv"> </span><span class="s">-o</span><span class="nv"> </span><span class="s">/kubectl-bin/kubectl</span><span class="nv"> </span><span class="s">&amp;&amp;</span><span class="nv"> </span><span class="s">chmod</span><span class="nv"> </span><span class="s">+x</span><span class="nv"> </span><span class="s">/kubectl-bin/kubectl"</span><span class="pi">]</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">kubectl-bin</span><span class="pi">,</span> <span class="nv">mountPath</span><span class="pi">:</span> <span class="nv">/kubectl-bin</span> <span class="pi">}</span>   <span class="c1"># not /usr/local/bin</span>
+</code></pre></div></div>
+
 <h2 id="bug-two-the-setting-that-wouldnt-stick">Bug two: the setting that wouldn’t stick</h2>
 
 <p>Getting that <code class="language-plaintext highlighter-rouge">PATH</code> into the tool plugin’s own environment needed its own fix. Rocky’s config is a JSON file on disk, and anything I wrote into it during pod startup vanished by the time the pod was ready. Something in the app’s own boot sequence rewrites the file afterward. The fix had to run after the app was fully up, not before.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">until </span>curl <span class="nt">-sf</span> http://127.0.0.1:8080/readyz<span class="p">;</span> <span class="k">do </span><span class="nb">sleep </span>2<span class="p">;</span> <span class="k">done
+</span>node <span class="nt">-e</span> <span class="s2">"... patch the config here, not in an initContainer ..."</span>
+</code></pre></div></div>
 
 <h2 id="bug-three-right-door-wrong-number">Bug three: right door, wrong number</h2>
 
@@ -29,9 +41,23 @@
 
 <p>A silent hang usually means a firewall. My network policy engine confirmed it: the connection was being dropped, and dropped packets don’t send anything back. I’d written the rule against the API server’s internal service port, but the network layer swaps that for the real backend server before deciding whether to allow the connection, and the real server listens on a different port than the service does. One number, wrong the whole time.</p>
 
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>dial tcp &lt;api-server&gt;:443: i/o timeout
+</code></pre></div></div>
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">egress</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">toEntities</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">kube-apiserver</span><span class="pi">]</span>
+    <span class="na">toPorts</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">ports</span><span class="pi">:</span> <span class="pi">[{</span> <span class="nv">port</span><span class="pi">:</span> <span class="s2">"</span><span class="s">6443"</span><span class="pi">,</span> <span class="nv">protocol</span><span class="pi">:</span> <span class="nv">TCP</span> <span class="pi">}]</span>  <span class="c1"># the real port, not 443</span>
+</code></pre></div></div>
+
 <h2 id="bug-four-a-permission-is-not-a-permission">Bug four: a permission is not a permission</h2>
 
 <p><code class="language-plaintext highlighter-rouge">kubectl get pods</code> worked. <code class="language-plaintext highlighter-rouge">kubectl logs</code> didn’t: flat permission denied, even though the same rule should have covered it. Reading a pod’s logs turns out to be its own distinct permission in Kubernetes, separate from reading the pod object itself.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">rules</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">apiGroups</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">"</span><span class="pi">]</span>
+    <span class="na">resources</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">pods/log</span><span class="pi">]</span>   <span class="c1"># separate from "pods" -- easy to miss</span>
+    <span class="na">verbs</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">get</span><span class="pi">]</span>
+</code></pre></div></div>
 
 <h2 id="what-actually-made-this-fast">What actually made this fast</h2>
 
