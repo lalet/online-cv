@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Jev vs. Laya: Two Typed-Decision Models, Ten Questions"
-date: 2026-09-29
+date: 2026-09-30
 tags: [ai, evaluation, jev, laya, decision-models]
 ---
 
