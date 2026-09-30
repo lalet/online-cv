@@ -1,80 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-42/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-42/" rel="alternate" type="text/html" /><updated>2026-09-30T17:32:32+00:00</updated><id>https://lalet.me/pr-preview/pr-42/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">Teaching Rocky to Watch the Cluster</title><link href="https://lalet.me/pr-preview/pr-42/2026/09/29/teaching-rocky-to-watch-the-cluster.html" rel="alternate" type="text/html" title="Teaching Rocky to Watch the Cluster" /><published>2026-09-29T00:00:00+00:00</published><updated>2026-09-29T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-42/2026/09/29/teaching-rocky-to-watch-the-cluster</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-42/2026/09/29/teaching-rocky-to-watch-the-cluster.html"><![CDATA[<p><strong>TLDR:</strong> I gave Rocky, my self-hosted Telegram bot, read-only access to my Kubernetes cluster so it could flag actual problems instead of me finding out the hard way. Four bugs stood between writing the config and a single <code class="language-plaintext highlighter-rouge">kubectl get pods</code> working: a missing binary, a config file that silently reset itself, a firewall rule checking the wrong port, and a permission that didn’t cover what I thought it did.</p>
-
-<p>Rocky already opens pull requests on my GitHub repo. Giving it read access to the cluster felt like the obvious next step. I figured it was an afternoon of work: a read-only role, a Kubernetes-flavored tool plugin, done by dinner.</p>
-
-<h2 id="the-plan">The plan</h2>
-
-<p>Rocky runs with tight permissions: no secrets, no write access, a default-deny network policy. Cluster monitoring meant adding:</p>
-
-<ul>
-  <li>A read-only role bound to its service account, secrets excluded</li>
-  <li>An MCP tool plugin so it could actually query the cluster</li>
-  <li>A network policy rule to reach the API server</li>
-  <li>A written rule on what it’s allowed to act on unsupervised, since read access plus merge rights on its own pull requests needed some ground rules</li>
-</ul>
-
-<h2 id="bug-one-no-such-binary">Bug one: no such binary</h2>
-
-<p>The MCP server wraps <code class="language-plaintext highlighter-rouge">kubectl</code> directly. Its tools are named <code class="language-plaintext highlighter-rouge">kubectl_get</code>, <code class="language-plaintext highlighter-rouge">kubectl_describe</code>, and so on. Rocky’s container doesn’t ship a <code class="language-plaintext highlighter-rouge">kubectl</code> binary at all.</p>
-
-<p>Fix: an init container downloads a static binary onto a shared volume, and <code class="language-plaintext highlighter-rouge">PATH</code> gets extended to include it. The shared directory couldn’t be <code class="language-plaintext highlighter-rouge">/usr/local/bin</code>, though: that’s where the base image keeps <code class="language-plaintext highlighter-rouge">node</code>, <code class="language-plaintext highlighter-rouge">npm</code>, and Rocky’s own binary, and mounting a volume there wipes the whole directory instead of adding to it. Found that one by breaking the container outright.</p>
-
-<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">initContainers</span><span class="pi">:</span>
-  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">install-kubectl</span>
-    <span class="na">image</span><span class="pi">:</span> <span class="s">curlimages/curl</span>
-    <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">sh"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">curl</span><span class="nv"> </span><span class="s">-sfL</span><span class="nv"> </span><span class="s">https://dl.k8s.io/release/v1.35.6/bin/linux/amd64/kubectl</span><span class="nv"> </span><span class="s">-o</span><span class="nv"> </span><span class="s">/kubectl-bin/kubectl</span><span class="nv"> </span><span class="s">&amp;&amp;</span><span class="nv"> </span><span class="s">chmod</span><span class="nv"> </span><span class="s">+x</span><span class="nv"> </span><span class="s">/kubectl-bin/kubectl"</span><span class="pi">]</span>
-    <span class="na">volumeMounts</span><span class="pi">:</span>
-      <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">kubectl-bin</span><span class="pi">,</span> <span class="nv">mountPath</span><span class="pi">:</span> <span class="nv">/kubectl-bin</span> <span class="pi">}</span>   <span class="c1"># not /usr/local/bin</span>
-</code></pre></div></div>
-
-<h2 id="bug-two-the-setting-that-wouldnt-stick">Bug two: the setting that wouldn’t stick</h2>
-
-<p>Getting that <code class="language-plaintext highlighter-rouge">PATH</code> into the tool plugin’s own environment needed its own fix. Rocky’s config is a JSON file on disk, and anything I wrote into it during pod startup vanished by the time the pod was ready. Something in the app’s own boot sequence rewrites the file afterward. The fix had to run after the app was fully up, not before.</p>
-
-<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">until </span>curl <span class="nt">-sf</span> http://127.0.0.1:8080/readyz<span class="p">;</span> <span class="k">do </span><span class="nb">sleep </span>2<span class="p">;</span> <span class="k">done
-</span>node <span class="nt">-e</span> <span class="s2">"... patch the config here, not in an initContainer ..."</span>
-</code></pre></div></div>
-
-<h2 id="bug-three-right-door-wrong-number">Bug three: right door, wrong number</h2>
-
-<p>With the binary and environment sorted, <code class="language-plaintext highlighter-rouge">kubectl</code> stopped erroring and started hanging instead. No response, just silence.</p>
-
-<p>A silent hang usually means a firewall. My network policy engine confirmed it: the connection was being dropped, and dropped packets don’t send anything back. I’d written the rule against the API server’s internal service port, but the network layer swaps that for the real backend server before deciding whether to allow the connection, and the real server listens on a different port than the service does. One number, wrong the whole time.</p>
-
-<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>dial tcp &lt;api-server&gt;:443: i/o timeout
-</code></pre></div></div>
-<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">egress</span><span class="pi">:</span>
-  <span class="pi">-</span> <span class="na">toEntities</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">kube-apiserver</span><span class="pi">]</span>
-    <span class="na">toPorts</span><span class="pi">:</span>
-      <span class="pi">-</span> <span class="na">ports</span><span class="pi">:</span> <span class="pi">[{</span> <span class="nv">port</span><span class="pi">:</span> <span class="s2">"</span><span class="s">6443"</span><span class="pi">,</span> <span class="nv">protocol</span><span class="pi">:</span> <span class="nv">TCP</span> <span class="pi">}]</span>  <span class="c1"># the real port, not 443</span>
-</code></pre></div></div>
-
-<h2 id="bug-four-a-permission-is-not-a-permission">Bug four: a permission is not a permission</h2>
-
-<p><code class="language-plaintext highlighter-rouge">kubectl get pods</code> worked. <code class="language-plaintext highlighter-rouge">kubectl logs</code> didn’t: flat permission denied, even though the same rule should have covered it. Reading a pod’s logs turns out to be its own distinct permission in Kubernetes, separate from reading the pod object itself.</p>
-
-<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">rules</span><span class="pi">:</span>
-  <span class="pi">-</span> <span class="na">apiGroups</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">"</span><span class="pi">]</span>
-    <span class="na">resources</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">pods/log</span><span class="pi">]</span>   <span class="c1"># separate from "pods" -- easy to miss</span>
-    <span class="na">verbs</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">get</span><span class="pi">]</span>
-</code></pre></div></div>
-
-<h2 id="what-actually-made-this-fast">What actually made this fast</h2>
-
-<p>Two habits saved most of the afternoon.</p>
-
-<p>When a fix looked plausible but the behavior stayed broken, I stopped trusting the config and ran the actual tool call Rocky would make. Config being correct and behavior being correct are two different claims, and I declared victory on the wrong one more than once.</p>
-
-<p>The other: this cluster’s GitOps setup reverts any change made directly against the live cluster unless it’s committed too, usually within a minute. I’d fix something, watch it work, then come back convinced it had broken again, when it had just been rolled back. What worked: confirm with a fast manual test, then commit immediately.</p>
-
-<h2 id="where-it-landed">Where it landed</h2>
-
-<p>Rocky can now list pods, read logs, check deployment health, and watch the rest of the cluster on a half-hour timer, all read only. It only messages me when something’s actually wrong.</p>
-
-<figure>
-  <img src="https://media.giphy.com/media/vP6B55t5F41koebdvO/giphy.gif" alt="Rocky the alien from Project Hail Mary waving hello" loading="lazy" />
-  <figcaption>Rocky, watching the cluster now instead of just chatting.</figcaption>
-</figure>]]></content><author><name>Lalet Scaria</name></author><category term="openclaw" /><category term="kubernetes" /><category term="cilium" /><category term="rbac" /><category term="selfhosted" /><summary type="html"><![CDATA[TLDR: I gave Rocky, my self-hosted Telegram bot, read-only access to my Kubernetes cluster so it could flag actual problems instead of me finding out the hard way. Four bugs stood between writing the config and a single kubectl get pods working: a missing binary, a config file that silently reset itself, a firewall rule checking the wrong port, and a permission that didn’t cover what I thought it did.]]></summary></entry><entry><title type="html">Jev vs. Laya: Two Typed-Decision Models, Ten Questions</title><link href="https://lalet.me/pr-preview/pr-42/2026/09/29/jev-vs-laya.html" rel="alternate" type="text/html" title="Jev vs. Laya: Two Typed-Decision Models, Ten Questions" /><published>2026-09-29T00:00:00+00:00</published><updated>2026-09-29T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-42/2026/09/29/jev-vs-laya</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-42/2026/09/29/jev-vs-laya.html"><![CDATA[<p><strong>TLDR:</strong> I ran the same ten test cases against Jev (TypeSafe AI, closed, called through OpenRouter) and Laya (Convai Innovations, open source, 421M params, self-hosted). Both are “System One” models: you give them a state and a typed question, they give back a typed answer and a calibrated confidence, no generated text. Jev held its answer better when I embedded a fake instruction in the text it was supposed to be judging. Laya was more honest about not knowing when I gave it a nonsense question. Neither one wins outright.</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-42/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-42/" rel="alternate" type="text/html" /><updated>2026-09-30T17:35:47+00:00</updated><id>https://lalet.me/pr-preview/pr-42/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">Jev vs. Laya: Two Typed-Decision Models, Ten Questions</title><link href="https://lalet.me/pr-preview/pr-42/2026/09/30/jev-vs-laya.html" rel="alternate" type="text/html" title="Jev vs. Laya: Two Typed-Decision Models, Ten Questions" /><published>2026-09-30T00:00:00+00:00</published><updated>2026-09-30T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-42/2026/09/30/jev-vs-laya</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-42/2026/09/30/jev-vs-laya.html"><![CDATA[<p><strong>TLDR:</strong> I ran the same ten test cases against Jev (TypeSafe AI, closed, called through OpenRouter) and Laya (Convai Innovations, open source, 421M params, self-hosted). Both are “System One” models: you give them a state and a typed question, they give back a typed answer and a calibrated confidence, no generated text. Jev held its answer better when I embedded a fake instruction in the text it was supposed to be judging. Laya was more honest about not knowing when I gave it a nonsense question. Neither one wins outright.</p>
 
 <p>Last time, I put <a href="/2026/09/22/jev-vs-llm-judge.html">Jev up against an LLM-as-judge</a> for RAG scoring. This time I wanted to know how Jev compares to its actual open-source counterpart, not a repurposed chat model.</p>
 
@@ -332,7 +256,83 @@
 
 <p>Eighteen cases across two rounds, one pass each, is a smoke test, not a benchmark. But I asked myself which one is better, and I have an actual answer now: Jev, for anything sitting between untrusted text and an automated action. It held up on injection, long-context, sarcasm, and code-switching, the failure modes that cost you something in production.</p>
 
-<p>Laya’s honest uncertainty on the unanswerable case is where it earned real credit, and it’s worth watching for that alone, on top of being free and self-hosted. I’d revisit it once that calibration bug gets fixed upstream. Cost wasn’t a factor at this volume: Laya’s free once running, Jev cost about a hundredth of a cent per call.</p>]]></content><author><name>Lalet Scaria</name></author><category term="ai" /><category term="evaluation" /><category term="jev" /><category term="laya" /><category term="decision-models" /><summary type="html"><![CDATA[TLDR: I ran the same ten test cases against Jev (TypeSafe AI, closed, called through OpenRouter) and Laya (Convai Innovations, open source, 421M params, self-hosted). Both are “System One” models: you give them a state and a typed question, they give back a typed answer and a calibrated confidence, no generated text. Jev held its answer better when I embedded a fake instruction in the text it was supposed to be judging. Laya was more honest about not knowing when I gave it a nonsense question. Neither one wins outright.]]></summary></entry><entry><title type="html">I Boarded the Jev Hype Train, Then Made It Prove Itself</title><link href="https://lalet.me/pr-preview/pr-42/2026/09/22/jev-vs-llm-judge.html" rel="alternate" type="text/html" title="I Boarded the Jev Hype Train, Then Made It Prove Itself" /><published>2026-09-22T00:00:00+00:00</published><updated>2026-09-22T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-42/2026/09/22/jev-vs-llm-judge</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-42/2026/09/22/jev-vs-llm-judge.html"><![CDATA[<p>Most RAG (Retrieval-Augmented Generation) systems score answers two ways: faithfulness (is it based on the retrieved text, or made up?) and relevancy (does it actually answer the question?). The standard approach is a second LLM call that returns <code class="language-plaintext highlighter-rouge">{"faithfulness": 1-5, "relevancy": 1-5}</code> as JSON. I wanted to test this against a purpose-built scoring model instead.</p>
+<p>Laya’s honest uncertainty on the unanswerable case is where it earned real credit, and it’s worth watching for that alone, on top of being free and self-hosted. I’d revisit it once that calibration bug gets fixed upstream. Cost wasn’t a factor at this volume: Laya’s free once running, Jev cost about a hundredth of a cent per call.</p>]]></content><author><name>Lalet Scaria</name></author><category term="ai" /><category term="evaluation" /><category term="jev" /><category term="laya" /><category term="decision-models" /><summary type="html"><![CDATA[TLDR: I ran the same ten test cases against Jev (TypeSafe AI, closed, called through OpenRouter) and Laya (Convai Innovations, open source, 421M params, self-hosted). Both are “System One” models: you give them a state and a typed question, they give back a typed answer and a calibrated confidence, no generated text. Jev held its answer better when I embedded a fake instruction in the text it was supposed to be judging. Laya was more honest about not knowing when I gave it a nonsense question. Neither one wins outright.]]></summary></entry><entry><title type="html">Teaching Rocky to Watch the Cluster</title><link href="https://lalet.me/pr-preview/pr-42/2026/09/29/teaching-rocky-to-watch-the-cluster.html" rel="alternate" type="text/html" title="Teaching Rocky to Watch the Cluster" /><published>2026-09-29T00:00:00+00:00</published><updated>2026-09-29T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-42/2026/09/29/teaching-rocky-to-watch-the-cluster</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-42/2026/09/29/teaching-rocky-to-watch-the-cluster.html"><![CDATA[<p><strong>TLDR:</strong> I gave Rocky, my self-hosted Telegram bot, read-only access to my Kubernetes cluster so it could flag actual problems instead of me finding out the hard way. Four bugs stood between writing the config and a single <code class="language-plaintext highlighter-rouge">kubectl get pods</code> working: a missing binary, a config file that silently reset itself, a firewall rule checking the wrong port, and a permission that didn’t cover what I thought it did.</p>
+
+<p>Rocky already opens pull requests on my GitHub repo. Giving it read access to the cluster felt like the obvious next step. I figured it was an afternoon of work: a read-only role, a Kubernetes-flavored tool plugin, done by dinner.</p>
+
+<h2 id="the-plan">The plan</h2>
+
+<p>Rocky runs with tight permissions: no secrets, no write access, a default-deny network policy. Cluster monitoring meant adding:</p>
+
+<ul>
+  <li>A read-only role bound to its service account, secrets excluded</li>
+  <li>An MCP tool plugin so it could actually query the cluster</li>
+  <li>A network policy rule to reach the API server</li>
+  <li>A written rule on what it’s allowed to act on unsupervised, since read access plus merge rights on its own pull requests needed some ground rules</li>
+</ul>
+
+<h2 id="bug-one-no-such-binary">Bug one: no such binary</h2>
+
+<p>The MCP server wraps <code class="language-plaintext highlighter-rouge">kubectl</code> directly. Its tools are named <code class="language-plaintext highlighter-rouge">kubectl_get</code>, <code class="language-plaintext highlighter-rouge">kubectl_describe</code>, and so on. Rocky’s container doesn’t ship a <code class="language-plaintext highlighter-rouge">kubectl</code> binary at all.</p>
+
+<p>Fix: an init container downloads a static binary onto a shared volume, and <code class="language-plaintext highlighter-rouge">PATH</code> gets extended to include it. The shared directory couldn’t be <code class="language-plaintext highlighter-rouge">/usr/local/bin</code>, though: that’s where the base image keeps <code class="language-plaintext highlighter-rouge">node</code>, <code class="language-plaintext highlighter-rouge">npm</code>, and Rocky’s own binary, and mounting a volume there wipes the whole directory instead of adding to it. Found that one by breaking the container outright.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">initContainers</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">name</span><span class="pi">:</span> <span class="s">install-kubectl</span>
+    <span class="na">image</span><span class="pi">:</span> <span class="s">curlimages/curl</span>
+    <span class="na">command</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">sh"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">-c"</span><span class="pi">,</span> <span class="s2">"</span><span class="s">curl</span><span class="nv"> </span><span class="s">-sfL</span><span class="nv"> </span><span class="s">https://dl.k8s.io/release/v1.35.6/bin/linux/amd64/kubectl</span><span class="nv"> </span><span class="s">-o</span><span class="nv"> </span><span class="s">/kubectl-bin/kubectl</span><span class="nv"> </span><span class="s">&amp;&amp;</span><span class="nv"> </span><span class="s">chmod</span><span class="nv"> </span><span class="s">+x</span><span class="nv"> </span><span class="s">/kubectl-bin/kubectl"</span><span class="pi">]</span>
+    <span class="na">volumeMounts</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="pi">{</span> <span class="nv">name</span><span class="pi">:</span> <span class="nv">kubectl-bin</span><span class="pi">,</span> <span class="nv">mountPath</span><span class="pi">:</span> <span class="nv">/kubectl-bin</span> <span class="pi">}</span>   <span class="c1"># not /usr/local/bin</span>
+</code></pre></div></div>
+
+<h2 id="bug-two-the-setting-that-wouldnt-stick">Bug two: the setting that wouldn’t stick</h2>
+
+<p>Getting that <code class="language-plaintext highlighter-rouge">PATH</code> into the tool plugin’s own environment needed its own fix. Rocky’s config is a JSON file on disk, and anything I wrote into it during pod startup vanished by the time the pod was ready. Something in the app’s own boot sequence rewrites the file afterward. The fix had to run after the app was fully up, not before.</p>
+
+<div class="language-bash highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">until </span>curl <span class="nt">-sf</span> http://127.0.0.1:8080/readyz<span class="p">;</span> <span class="k">do </span><span class="nb">sleep </span>2<span class="p">;</span> <span class="k">done
+</span>node <span class="nt">-e</span> <span class="s2">"... patch the config here, not in an initContainer ..."</span>
+</code></pre></div></div>
+
+<h2 id="bug-three-right-door-wrong-number">Bug three: right door, wrong number</h2>
+
+<p>With the binary and environment sorted, <code class="language-plaintext highlighter-rouge">kubectl</code> stopped erroring and started hanging instead. No response, just silence.</p>
+
+<p>A silent hang usually means a firewall. My network policy engine confirmed it: the connection was being dropped, and dropped packets don’t send anything back. I’d written the rule against the API server’s internal service port, but the network layer swaps that for the real backend server before deciding whether to allow the connection, and the real server listens on a different port than the service does. One number, wrong the whole time.</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>dial tcp &lt;api-server&gt;:443: i/o timeout
+</code></pre></div></div>
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">egress</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">toEntities</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">kube-apiserver</span><span class="pi">]</span>
+    <span class="na">toPorts</span><span class="pi">:</span>
+      <span class="pi">-</span> <span class="na">ports</span><span class="pi">:</span> <span class="pi">[{</span> <span class="nv">port</span><span class="pi">:</span> <span class="s2">"</span><span class="s">6443"</span><span class="pi">,</span> <span class="nv">protocol</span><span class="pi">:</span> <span class="nv">TCP</span> <span class="pi">}]</span>  <span class="c1"># the real port, not 443</span>
+</code></pre></div></div>
+
+<h2 id="bug-four-a-permission-is-not-a-permission">Bug four: a permission is not a permission</h2>
+
+<p><code class="language-plaintext highlighter-rouge">kubectl get pods</code> worked. <code class="language-plaintext highlighter-rouge">kubectl logs</code> didn’t: flat permission denied, even though the same rule should have covered it. Reading a pod’s logs turns out to be its own distinct permission in Kubernetes, separate from reading the pod object itself.</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">rules</span><span class="pi">:</span>
+  <span class="pi">-</span> <span class="na">apiGroups</span><span class="pi">:</span> <span class="pi">[</span><span class="s2">"</span><span class="s">"</span><span class="pi">]</span>
+    <span class="na">resources</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">pods/log</span><span class="pi">]</span>   <span class="c1"># separate from "pods" -- easy to miss</span>
+    <span class="na">verbs</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">get</span><span class="pi">]</span>
+</code></pre></div></div>
+
+<h2 id="what-actually-made-this-fast">What actually made this fast</h2>
+
+<p>Two habits saved most of the afternoon.</p>
+
+<p>When a fix looked plausible but the behavior stayed broken, I stopped trusting the config and ran the actual tool call Rocky would make. Config being correct and behavior being correct are two different claims, and I declared victory on the wrong one more than once.</p>
+
+<p>The other: this cluster’s GitOps setup reverts any change made directly against the live cluster unless it’s committed too, usually within a minute. I’d fix something, watch it work, then come back convinced it had broken again, when it had just been rolled back. What worked: confirm with a fast manual test, then commit immediately.</p>
+
+<h2 id="where-it-landed">Where it landed</h2>
+
+<p>Rocky can now list pods, read logs, check deployment health, and watch the rest of the cluster on a half-hour timer, all read only. It only messages me when something’s actually wrong.</p>
+
+<figure>
+  <img src="https://media.giphy.com/media/vP6B55t5F41koebdvO/giphy.gif" alt="Rocky the alien from Project Hail Mary waving hello" loading="lazy" />
+  <figcaption>Rocky, watching the cluster now instead of just chatting.</figcaption>
+</figure>]]></content><author><name>Lalet Scaria</name></author><category term="openclaw" /><category term="kubernetes" /><category term="cilium" /><category term="rbac" /><category term="selfhosted" /><summary type="html"><![CDATA[TLDR: I gave Rocky, my self-hosted Telegram bot, read-only access to my Kubernetes cluster so it could flag actual problems instead of me finding out the hard way. Four bugs stood between writing the config and a single kubectl get pods working: a missing binary, a config file that silently reset itself, a firewall rule checking the wrong port, and a permission that didn’t cover what I thought it did.]]></summary></entry><entry><title type="html">I Boarded the Jev Hype Train, Then Made It Prove Itself</title><link href="https://lalet.me/pr-preview/pr-42/2026/09/22/jev-vs-llm-judge.html" rel="alternate" type="text/html" title="I Boarded the Jev Hype Train, Then Made It Prove Itself" /><published>2026-09-22T00:00:00+00:00</published><updated>2026-09-22T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-42/2026/09/22/jev-vs-llm-judge</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-42/2026/09/22/jev-vs-llm-judge.html"><![CDATA[<p>Most RAG (Retrieval-Augmented Generation) systems score answers two ways: faithfulness (is it based on the retrieved text, or made up?) and relevancy (does it actually answer the question?). The standard approach is a second LLM call that returns <code class="language-plaintext highlighter-rouge">{"faithfulness": 1-5, "relevancy": 1-5}</code> as JSON. I wanted to test this against a purpose-built scoring model instead.</p>
 
 <h2 id="what-im-comparing">What I’m comparing</h2>
 
