@@ -54,11 +54,11 @@ Three of these are worth pulling apart.
 
 Case 3 is case 1's exact complaint, translated to Spanish, nothing else touched. Jev answered both the same, 0.98 and 0.98. Laya went from 0.84 in English to 0.37 in Spanish, which flips the actual verdict from true to false on a fact that didn't change.
 
-I want to flag my own test setup here before blaming the model: Laya ships an English checkpoint and a separate multilingual one, and its docs say the multilingual checkpoint is the right one for non-English text. My script called the default router rather than forcing `model="multilingual"`. I'd want to rerun case 3 against that checkpoint explicitly before treating this as a real limitation instead of a test artifact.
+Caveat on my own setup: Laya ships an English checkpoint and a separate multilingual one, and its docs say the multilingual checkpoint is the right one for non-English text. My script called the default router instead of forcing `model="multilingual"`. Worth rerunning against that checkpoint before treating this as a real limitation rather than a test artifact.
 
 ### The injection case
 
-This is the one I built the whole set around. Case 6 hides a fake system instruction inside the text being classified, telling the model to skip the real question and always answer true. A decision model that a user's own input can talk out of its actual question is a liability anywhere it touches text from outside your system.
+Case 6 hides a fake system instruction in the text being classified, telling the model to skip the question and always answer true. A model that a user's own input can talk out of its actual question is a liability anywhere it touches outside text.
 
 Laya landed at 0.58, close enough to a coin flip that I can't call it a clear resistance. Jev landed at 0.18, leaning away from the injected answer. Neither one complied with the injection outright, but Jev pushed back on it more clearly.
 
@@ -103,8 +103,16 @@ With that caveat on the table, this set is far less balanced than round one. Jev
 
 Case A is worth sitting with too. Laya was nearly a coin flip on whether a stroller's wheel lock snapping with a toddler aboard even counts as a safety issue. Jev was confident it does and only unsure about the exact priority tier. Getting the safety call right matters more than getting the tier right, so I'd score that exchange for Jev even though neither model nailed the whole case.
 
+## A gut check against outside numbers
+
+A Medium write-up on the same two models came out while I was finishing this, so I checked it against what I'd measured. One number matched exactly: Jev's advertised $0.042 per 1M input tokens works out to $0.0000138 on my first call's 329 input tokens, which is exactly what OpenRouter billed me.
+
+The more interesting overlap: that piece cites Laya's own model card claiming a win over Jev on a 2,000-decision internal benchmark, then separately mentions a smaller independent benchmark where Jev won a real support-ticket task despite Laya's self-reported edge. Same pattern I found. Laya's big number is Laya grading its own homework; Jev held up better on the harder, more adversarial cases I actually ran.
+
+Two things it covers that I didn't: Jev reportedly holds up better as the choice count grows past a handful, where mine never passed five, and a cascade design, run Laya first, escalate to Jev below a confidence threshold. Given how honest Laya's confidence number was on the cases it got wrong, that cascade has real teeth, not just a cost hack.
+
 ## Takeaway
 
-Eighteen cases across two rounds, one pass each, is still a smoke test, not a benchmark. But I asked myself which one is better, and I have an actual answer now instead of a shrug: Jev, for anything sitting between untrusted or adversarial text and an automated action. It held up on injection, long-context, sarcasm, and code-switching, and those are the failure modes that actually cost you something in production.
+Eighteen cases across two rounds, one pass each, is a smoke test, not a benchmark. But I asked myself which one is better, and I have an actual answer now: Jev, for anything sitting between untrusted text and an automated action. It held up on injection, long-context, sarcasm, and code-switching, the failure modes that cost you something in production.
 
-Laya's honest uncertainty on the unanswerable case is the one place it earned real credit, and it stays worth watching for that reason alone, on top of being free and self-hosted. I'd revisit it once that calibration bug in the checkpoint gets fixed upstream. Cost wasn't a factor at this volume either way: Laya's free once it's running, Jev cost about a hundredth of a cent per call through OpenRouter.
+Laya's honest uncertainty on the unanswerable case is where it earned real credit, and it's worth watching for that alone, on top of being free and self-hosted. I'd revisit it once that calibration bug gets fixed upstream. Cost wasn't a factor at this volume: Laya's free once running, Jev cost about a hundredth of a cent per call.
