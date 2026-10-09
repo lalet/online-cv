@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 300" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+<defs><marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0b0b0b"/></marker></defs>
+<rect width="1000" height="300" fill="#fcfcfb" stroke="#e1e0d9"/>
+<rect x="30" y="100" width="170" height="80" rx="8" fill="#fff" stroke="#c3c2b7"/>
+<text x="115" y="146" font-size="18" text-anchor="middle" fill="#0b0b0b">Browser</text>
+<rect x="290" y="100" width="190" height="80" rx="8" fill="#fff" stroke="#c3c2b7"/>
+<text x="385" y="132" font-size="18" text-anchor="middle" fill="#0b0b0b">Cloudflare</text>
+<text x="385" y="156" font-size="14" text-anchor="middle" fill="#898781">identity check</text>
+<rect x="580" y="40" width="390" height="220" rx="10" fill="#f3f2ee" stroke="#c3c2b7" stroke-dasharray="6 4"/>
+<text x="600" y="66" font-size="14" fill="#898781">Home network (no inbound ports)</text>
+<rect x="610" y="100" width="150" height="80" rx="8" fill="#fff" stroke="#c3c2b7"/>
+<text x="685" y="136" font-size="18" text-anchor="middle" fill="#0b0b0b">Tunnel agent</text>
+<text x="685" y="158" font-size="14" text-anchor="middle" fill="#898781">in the cluster</text>
+<rect x="820" y="100" width="130" height="80" rx="8" fill="#fff" stroke="#c3c2b7"/>
+<text x="885" y="146" font-size="18" text-anchor="middle" fill="#0b0b0b">Dashboards</text>
+<line x1="200" y1="140" x2="288" y2="140" stroke="#0b0b0b" stroke-width="2" marker-end="url(#a)"/>
+<line x1="760" y1="140" x2="818" y2="140" stroke="#0b0b0b" stroke-width="2" marker-end="url(#a)"/>
+<line x1="610" y1="215" x2="482" y2="215" stroke="#0b0b0b" stroke-width="2" stroke-dasharray="6 4"/>
+<path d="M482,215 L482,182" stroke="#0b0b0b" stroke-width="2" fill="none" marker-end="url(#a)"/>
+<text x="545" y="238" font-size="14" text-anchor="middle" fill="#0b0b0b">agent dials out</text>
+<text x="244" y="128" font-size="14" text-anchor="middle" fill="#898781">request</text>
+</svg>
