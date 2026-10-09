@@ -11,6 +11,11 @@ The cluster calls out instead of waiting to be called. A small agent running ins
 
 Before a request gets anywhere near the cluster, [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) asks who I am. If I can't prove it, the request stops at Cloudflare and my network never sees it.
 
+<figure>
+  <img src="{{ '/assets/images/no-open-ports.svg' | relative_url }}" alt="Diagram: a browser sends a request to Cloudflare, which checks identity. The tunnel agent inside the home network dials out to Cloudflare, and traffic then flows from the agent to the dashboards. No inbound ports are open on the home network." loading="lazy">
+  <figcaption>The agent dials out. Nothing dials in.</figcaption>
+</figure>
+
 Each hostname points at one internal service, so a single tunnel covers every dashboard. Adding a new one means adding a hostname and an access rule. It doesn't mean touching the network.
 
 The only snag was my home gateway, which silently drops the UDP protocol the tunnel prefers. The agent just wouldn't connect, and the logs gave no hint why. Forcing it onto TCP fixed it. If a tunnel refuses to come up and says nothing useful, check that first.
