@@ -16,7 +16,7 @@ tags: [web, unicode]
 .lang-toggle { display: inline-flex; gap: 4px; background: #f4f4f4; border-radius: 999px; padding: 4px; margin-bottom: 1.4em; }
 .lang-btn { border: none; background: transparent; padding: 6px 18px; border-radius: 999px; font-size: 0.9em; cursor: pointer; color: #556; }
 .lang-btn.active { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 600; color: #222; }
-#lang-ml { display: none; font-family: 'Noto Sans Malayalam', sans-serif; }
+#lang-ml { font-family: 'Noto Sans Malayalam', sans-serif; }
 .font-credit { font-size: 0.8em; color: #97AAC3; margin-top: 2em; border-top: 1px solid #eee; padding-top: 1em; }
 </style>
 
@@ -69,7 +69,7 @@ Because a URL in your own language shouldn't come with an asterisk. A word meani
 
 </div>
 
-<div id="lang-ml" markdown="1">
+<div id="lang-ml" markdown="1" style="display: none;">
 
 **ചുരുക്കം:** [lalet.me/ഓർമ്മ](https://lalet.me/orma/), മലയാളത്തിൽ, വിലാസ ബാറിൽ തന്നെ, [ഞാൻ ഉണ്ടാക്കിയ ആ മുറിയിലേക്ക്](/2026/10/16/orma-a-room-in-koovappally.html) റീഡയറക്ട് ചെയ്യുന്നു. അത് ശരിയാക്കാൻ, മലയാളം യൂണികോഡിൽ ഒരേ വാക്ക് ബൈറ്റുകളിൽ രണ്ട് വ്യത്യസ്ത രീതിയിൽ എഴുതാമെന്ന് കണ്ടെത്തേണ്ടി വന്നു, ഒരു സാധാരണ സ്ട്രിംഗ് മാച്ചിങ്ങിന് അതിലൊന്നേ പിടികിട്ടൂ.
 
