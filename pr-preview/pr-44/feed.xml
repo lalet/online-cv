@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-44/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-44/" rel="alternate" type="text/html" /><updated>2026-11-06T10:00:52+00:00</updated><id>https://lalet.me/pr-preview/pr-44/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">How to Use Your Native Language in a Domain Path</title><link href="https://lalet.me/pr-preview/pr-44/2026/11/06/same-word-two-spellings-one-redirect.html" rel="alternate" type="text/html" title="How to Use Your Native Language in a Domain Path" /><published>2026-11-06T00:00:00+00:00</published><updated>2026-11-06T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-44/2026/11/06/same-word-two-spellings-one-redirect</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-44/2026/11/06/same-word-two-spellings-one-redirect.html"><![CDATA[<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Malayalam:wght@400;500;700&amp;display=swap" rel="stylesheet" />
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-44/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-44/" rel="alternate" type="text/html" /><updated>2026-11-06T10:06:43+00:00</updated><id>https://lalet.me/pr-preview/pr-44/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">How to Use Your Native Language in a Domain Path</title><link href="https://lalet.me/pr-preview/pr-44/2026/11/06/same-word-two-spellings-one-redirect.html" rel="alternate" type="text/html" title="How to Use Your Native Language in a Domain Path" /><published>2026-11-06T00:00:00+00:00</published><updated>2026-11-06T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-44/2026/11/06/same-word-two-spellings-one-redirect</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-44/2026/11/06/same-word-two-spellings-one-redirect.html"><![CDATA[<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Malayalam:wght@400;500;700&amp;display=swap" rel="stylesheet" />
 
 <div class="lang-toggle" role="group" aria-label="Language">
   <button type="button" class="lang-btn active" data-lang="en">English</button>
@@ -9,7 +9,7 @@
 .lang-toggle { display: inline-flex; gap: 4px; background: #f4f4f4; border-radius: 999px; padding: 4px; margin-bottom: 1.4em; }
 .lang-btn { border: none; background: transparent; padding: 6px 18px; border-radius: 999px; font-size: 0.9em; cursor: pointer; color: #556; }
 .lang-btn.active { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.08); font-weight: 600; color: #222; }
-#lang-ml { display: none; font-family: 'Noto Sans Malayalam', sans-serif; }
+#lang-ml { font-family: 'Noto Sans Malayalam', sans-serif; }
 .font-credit { font-size: 0.8em; color: #97AAC3; margin-top: 2em; border-top: 1px solid #eee; padding-top: 1em; }
 </style>
 
@@ -63,7 +63,7 @@ curl <span class="nt">-I</span> <span class="nt">--path-as-is</span> <span class
 
 </div>
 
-<div id="lang-ml">
+<div id="lang-ml" style="display: none;">
 
   <p><strong>ചുരുക്കം:</strong> <a href="https://lalet.me/orma/">lalet.me/ഓർമ്മ</a>, മലയാളത്തിൽ, വിലാസ ബാറിൽ തന്നെ, <a href="/2026/10/16/orma-a-room-in-koovappally.html">ഞാൻ ഉണ്ടാക്കിയ ആ മുറിയിലേക്ക്</a> റീഡയറക്ട് ചെയ്യുന്നു. അത് ശരിയാക്കാൻ, മലയാളം യൂണികോഡിൽ ഒരേ വാക്ക് ബൈറ്റുകളിൽ രണ്ട് വ്യത്യസ്ത രീതിയിൽ എഴുതാമെന്ന് കണ്ടെത്തേണ്ടി വന്നു, ഒരു സാധാരണ സ്ട്രിംഗ് മാച്ചിങ്ങിന് അതിലൊന്നേ പിടികിട്ടൂ.</p>
 
