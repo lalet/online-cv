@@ -2,14 +2,14 @@
 layout: post
 title: "How to Use Your Native Language in a Domain Path"
 date: 2026-11-06
-tags: [web, unicode, cloudflare]
+tags: [web, unicode]
 ---
 
 **TLDR:** [lalet.me/ഓർമ്മ](https://lalet.me/orma/), Malayalam, right in the address bar, redirects to [the room I built there](/2026/10/16/orma-a-room-in-koovappally.html). Getting that working meant finding out Malayalam Unicode lets you spell the same word two genuinely different ways in bytes, and a plain string match on the URL only catches one of them.
 
 ## The address bar lies a little
 
-What you see in a browser's address bar is an IRI, the pretty, readable version. What actually goes out on the wire is a URI: ASCII only. So the browser turns ഓർമ്മ into raw UTF-8 bytes and [percent-encodes](https://developer.mozilla.org/en-US/docs/Glossary/Percent-encoding) each one before Cloudflare ever sees a request. My redirect rule just needed to match that byte string and send a 301 to `/orma/`. Easy, well documented, works first try.
+What you see in a browser's address bar is the pretty, readable version. What actually gets sent is ASCII only, so the browser turns ഓർമ്മ into raw UTF-8 bytes and [percent-encodes](https://developer.mozilla.org/en-US/docs/Glossary/Percent-encoding) each one first. A redirect rule just needed to match that byte string and send a visitor on to `/orma/`. Easy, well documented, worked first try.
 
 Except it didn't work for everyone.
 
@@ -32,7 +32,7 @@ curl -I --path-as-is "https://lalet.me/%E0%B4%93%E0%B4%B0%E0%B5%8D%E2%80%8D%E0%B
 # also 301, once the second spelling got its own rule
 ```
 
-Before the fix, the second one 404'd silently. Whoever typed ഓർമ്മ on a keyboard using the decomposed spelling would have gotten a dead link with no visible reason why, since both strings look identical on screen. [Cloudflare's redirect rules](https://developers.cloudflare.com/rules/url-forwarding/single-redirects/) match the literal request path, not the rendered text, so both byte sequences needed their own line.
+Before the fix, the second one 404'd silently. Whoever typed ഓർമ്മ on a keyboard using the decomposed spelling would have gotten a dead link with no visible reason why, since both strings look identical on screen. A redirect rule matches the literal bytes in the request, not the rendered text, so both spellings needed their own line.
 
 ## Why bother with any of this
 
