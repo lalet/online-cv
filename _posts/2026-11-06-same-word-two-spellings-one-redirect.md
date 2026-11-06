@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Same Word, Two Spellings, One Redirect"
+title: "How to Use Your Native Language in a Domain Path"
 date: 2026-11-06
 tags: [web, unicode, cloudflare]
 ---
