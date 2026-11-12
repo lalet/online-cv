@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "I upgraded every layer of the homelab and mostly nothing went down"
-date: 2026-11-13
+date: 2026-11-12
 tags: [homelab, kubernetes, talos, proxmox, longhorn, upgrades]
 ---
 
