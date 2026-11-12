@@ -5,7 +5,7 @@ date: 2026-11-12
 tags: [homelab, kubernetes, talos, proxmox, longhorn, upgrades]
 ---
 
-A few days, every layer, one rule: nothing goes offline that I didn't plan to take offline. Here is what I upgraded, what bit me, and what I changed so it won't bite again.
+A few days, every layer, one rule: nothing goes offline that I didn't plan to take offline. Here is what I upgraded, what broke, and what I changed so it won't break again.
 
 ## What got upgraded
 
@@ -13,7 +13,7 @@ A few days, every layer, one rule: nothing goes offline that I didn't plan to ta
 - Then [Talos Linux](https://www.talos.dev/) 1.13 to 1.14, with [gVisor](https://gvisor.dev/) added on the workers.
 - Then [Kubernetes](https://kubernetes.io/) 1.35 to 1.36.
 - Last, both [Proxmox](https://www.proxmox.com/) hosts. One had been up for 143 days and had over 200 pending updates.
-- Every change went in as a pull request. [ArgoCD](https://argo-cd.readthedocs.io/) or a short script applied it.
+- Every change went in as a pull request, applied by [ArgoCD](https://argo-cd.readthedocs.io/) or a short script.
 
 ## The order mattered
 
@@ -24,8 +24,8 @@ A few days, every layer, one rule: nothing goes offline that I didn't plan to ta
 
 ## The Talos problems were all in my config
 
-- I had pinned the Talos image server to a fixed IP address "to be safe". That IP went stale and the installer download timed out. I removed the pin. Normal DNS is the safe choice.
-- The tool that generated my Talos configs had been archived, and its last version refused my config. I replaced it with a 50 line script around `talosctl gen config`. It has fewer moving parts and nothing that can go unmaintained.
+- I had pinned the Talos image server to a fixed IP "to be safe". The IP went stale and the installer download timed out. Normal DNS was the safe choice all along.
+- The tool that generated my Talos configs had been archived, and its last version refused my config. I replaced it with a 50 line script around `talosctl gen config`. Nothing left to go unmaintained.
 - The old tool named one encryption key differently. The value matched. The name didn't. One control plane briefly couldn't read Secrets. Lesson: when comparing configs, compare the names too, not only the values.
 - Talos 1.14 brings a new config format. It also switches on a workload isolation setting that breaks Longhorn's storage connections. I pinned the old format for now.
 - I trust a config change only when the dry run says "no changes" on every node.
@@ -52,7 +52,7 @@ A few days, every layer, one rule: nothing goes offline that I didn't plan to ta
 ## Proxmox had two problems I hadn't noticed
 
 - Disk space freed inside a VM never went back to the host. The VM disks had `discard` turned off, and nothing inside the VMs ran a trim. I turned on both: discard in Terraform, and a weekly trim in Talos.
-- Inside the VM, the disk claimed to support trim even with discard off. That check proved nothing.
+- Inside the VM, the disk claimed trim support even with discard off. So that check proves nothing.
 - The Terraform provider reboots VMs by default when a change needs it. One apply could have restarted five VMs at once. It's now off.
 - Settings like `discard` only take effect after a full power cycle. A reboot from inside the VM isn't enough. My loop for each VM: shut down through Talos, which drains the node first. Then start the VM again with a targeted [OpenTofu](https://opentofu.org/) apply.
 - The VMs' CD drives pointed at old ISO files that the next apply would delete. A VM with a missing ISO might not boot. Now the new ISO is downloaded and attached before the old one is removed.
@@ -71,13 +71,12 @@ A few days, every layer, one rule: nothing goes offline that I didn't plan to ta
 
 - Measure before you plan. I nearly put a new SSD on a host whose SSD pool was already fully allocated.
 - A PR built on top of another unmerged PR can merge as an empty commit after a squash. Mine did, and Garage stayed off longer than planned. Branch from main after the first PR merges, then check that the change actually landed on main.
-- Keep a rollback for every step. I saved each node's current config before applying a new one and checked that it restored cleanly.
+- Keep a rollback for every step. I saved each node's live config first and checked it restored cleanly.
 - Check what's on the node, not just what the tool reports. Several "done" messages were wrong until I looked.
 
 ## What I'd do next time
 
 - Buy a proper router. The whole LAN depends on the ISP's box. If a new ISP hands out a different address range, every node address breaks. With my own router and the ISP box in bridge mode, switching ISPs is just a cable swap.
-- Move the remaining single-node services onto replicated storage before patching, not after.
-- Keep the 1.1.1.1 DNS fallback that went in this round. It's cheap insurance.
+- Move single-node services onto replicated storage before patching, not after. The 1.1.1.1 DNS fallback added this round is also staying.
 
-The final tally: everything upgraded, three minutes of login errors when the database primary moved without warning, and about ten minutes without logs while Garage was off. Next up is gVisor sandboxes for AI agents, which is why I wanted Kubernetes 1.36 in the first place.
+Final tally: everything upgraded, three minutes of login errors when the database primary moved on its own, and about ten minutes without logs while Garage was off. Next up is gVisor sandboxes for AI agents. That is why I wanted Kubernetes 1.36 in the first place.
