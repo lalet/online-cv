@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-45/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-45/" rel="alternate" type="text/html" /><updated>2026-11-12T23:55:41+00:00</updated><id>https://lalet.me/pr-preview/pr-45/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">I upgraded every layer of the homelab and mostly nothing went down</title><link href="https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack.html" rel="alternate" type="text/html" title="I upgraded every layer of the homelab and mostly nothing went down" /><published>2026-11-12T00:00:00+00:00</published><updated>2026-11-12T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack.html"><![CDATA[<p>A few days, every layer, one rule: nothing goes offline that I didn’t plan to take offline. Here is what I upgraded, what bit me, and what I changed so it won’t bite again.</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-45/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-45/" rel="alternate" type="text/html" /><updated>2026-11-12T23:59:48+00:00</updated><id>https://lalet.me/pr-preview/pr-45/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">I upgraded every layer of the homelab and mostly nothing went down</title><link href="https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack.html" rel="alternate" type="text/html" title="I upgraded every layer of the homelab and mostly nothing went down" /><published>2026-11-12T00:00:00+00:00</published><updated>2026-11-12T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack.html"><![CDATA[<p>A few days, every layer, one rule: nothing goes offline that I didn’t plan to take offline. Here is what I upgraded, what broke, and what I changed so it won’t break again.</p>
 
 <h2 id="what-got-upgraded">What got upgraded</h2>
 
@@ -7,7 +7,7 @@
   <li>Then <a href="https://www.talos.dev/">Talos Linux</a> 1.13 to 1.14, with <a href="https://gvisor.dev/">gVisor</a> added on the workers.</li>
   <li>Then <a href="https://kubernetes.io/">Kubernetes</a> 1.35 to 1.36.</li>
   <li>Last, both <a href="https://www.proxmox.com/">Proxmox</a> hosts. One had been up for 143 days and had over 200 pending updates.</li>
-  <li>Every change went in as a pull request. <a href="https://argo-cd.readthedocs.io/">ArgoCD</a> or a short script applied it.</li>
+  <li>Every change went in as a pull request, applied by <a href="https://argo-cd.readthedocs.io/">ArgoCD</a> or a short script.</li>
 </ul>
 
 <h2 id="the-order-mattered">The order mattered</h2>
@@ -22,8 +22,8 @@
 <h2 id="the-talos-problems-were-all-in-my-config">The Talos problems were all in my config</h2>
 
 <ul>
-  <li>I had pinned the Talos image server to a fixed IP address “to be safe”. That IP went stale and the installer download timed out. I removed the pin. Normal DNS is the safe choice.</li>
-  <li>The tool that generated my Talos configs had been archived, and its last version refused my config. I replaced it with a 50 line script around <code class="language-plaintext highlighter-rouge">talosctl gen config</code>. It has fewer moving parts and nothing that can go unmaintained.</li>
+  <li>I had pinned the Talos image server to a fixed IP “to be safe”. The IP went stale and the installer download timed out. Normal DNS was the safe choice all along.</li>
+  <li>The tool that generated my Talos configs had been archived, and its last version refused my config. I replaced it with a 50 line script around <code class="language-plaintext highlighter-rouge">talosctl gen config</code>. Nothing left to go unmaintained.</li>
   <li>The old tool named one encryption key differently. The value matched. The name didn’t. One control plane briefly couldn’t read Secrets. Lesson: when comparing configs, compare the names too, not only the values.</li>
   <li>Talos 1.14 brings a new config format. It also switches on a workload isolation setting that breaks Longhorn’s storage connections. I pinned the old format for now.</li>
   <li>I trust a config change only when the dry run says “no changes” on every node.</li>
@@ -56,7 +56,7 @@
 
 <ul>
   <li>Disk space freed inside a VM never went back to the host. The VM disks had <code class="language-plaintext highlighter-rouge">discard</code> turned off, and nothing inside the VMs ran a trim. I turned on both: discard in Terraform, and a weekly trim in Talos.</li>
-  <li>Inside the VM, the disk claimed to support trim even with discard off. That check proved nothing.</li>
+  <li>Inside the VM, the disk claimed trim support even with discard off. So that check proves nothing.</li>
   <li>The Terraform provider reboots VMs by default when a change needs it. One apply could have restarted five VMs at once. It’s now off.</li>
   <li>Settings like <code class="language-plaintext highlighter-rouge">discard</code> only take effect after a full power cycle. A reboot from inside the VM isn’t enough. My loop for each VM: shut down through Talos, which drains the node first. Then start the VM again with a targeted <a href="https://opentofu.org/">OpenTofu</a> apply.</li>
   <li>The VMs’ CD drives pointed at old ISO files that the next apply would delete. A VM with a missing ISO might not boot. Now the new ISO is downloaded and attached before the old one is removed.</li>
@@ -79,7 +79,7 @@
 <ul>
   <li>Measure before you plan. I nearly put a new SSD on a host whose SSD pool was already fully allocated.</li>
   <li>A PR built on top of another unmerged PR can merge as an empty commit after a squash. Mine did, and Garage stayed off longer than planned. Branch from main after the first PR merges, then check that the change actually landed on main.</li>
-  <li>Keep a rollback for every step. I saved each node’s current config before applying a new one and checked that it restored cleanly.</li>
+  <li>Keep a rollback for every step. I saved each node’s live config first and checked it restored cleanly.</li>
   <li>Check what’s on the node, not just what the tool reports. Several “done” messages were wrong until I looked.</li>
 </ul>
 
@@ -87,11 +87,10 @@
 
 <ul>
   <li>Buy a proper router. The whole LAN depends on the ISP’s box. If a new ISP hands out a different address range, every node address breaks. With my own router and the ISP box in bridge mode, switching ISPs is just a cable swap.</li>
-  <li>Move the remaining single-node services onto replicated storage before patching, not after.</li>
-  <li>Keep the 1.1.1.1 DNS fallback that went in this round. It’s cheap insurance.</li>
+  <li>Move single-node services onto replicated storage before patching, not after. The 1.1.1.1 DNS fallback added this round is also staying.</li>
 </ul>
 
-<p>The final tally: everything upgraded, three minutes of login errors when the database primary moved without warning, and about ten minutes without logs while Garage was off. Next up is gVisor sandboxes for AI agents, which is why I wanted Kubernetes 1.36 in the first place.</p>]]></content><author><name>Lalet Scaria</name></author><category term="homelab" /><category term="kubernetes" /><category term="talos" /><category term="proxmox" /><category term="longhorn" /><category term="upgrades" /><summary type="html"><![CDATA[A few days, every layer, one rule: nothing goes offline that I didn’t plan to take offline. Here is what I upgraded, what bit me, and what I changed so it won’t bite again.]]></summary></entry><entry><title type="html">How to Use Your Native Language in a Domain Path</title><link href="https://lalet.me/pr-preview/pr-45/2026/11/06/same-word-two-spellings-one-redirect.html" rel="alternate" type="text/html" title="How to Use Your Native Language in a Domain Path" /><published>2026-11-06T00:00:00+00:00</published><updated>2026-11-06T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-45/2026/11/06/same-word-two-spellings-one-redirect</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-45/2026/11/06/same-word-two-spellings-one-redirect.html"><![CDATA[<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Malayalam:wght@400;500;700&amp;display=swap" rel="stylesheet" />
+<p>Final tally: everything upgraded, three minutes of login errors when the database primary moved on its own, and about ten minutes without logs while Garage was off. Next up is gVisor sandboxes for AI agents. That is why I wanted Kubernetes 1.36 in the first place.</p>]]></content><author><name>Lalet Scaria</name></author><category term="homelab" /><category term="kubernetes" /><category term="talos" /><category term="proxmox" /><category term="longhorn" /><category term="upgrades" /><summary type="html"><![CDATA[A few days, every layer, one rule: nothing goes offline that I didn’t plan to take offline. Here is what I upgraded, what broke, and what I changed so it won’t break again.]]></summary></entry><entry><title type="html">How to Use Your Native Language in a Domain Path</title><link href="https://lalet.me/pr-preview/pr-45/2026/11/06/same-word-two-spellings-one-redirect.html" rel="alternate" type="text/html" title="How to Use Your Native Language in a Domain Path" /><published>2026-11-06T00:00:00+00:00</published><updated>2026-11-06T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-45/2026/11/06/same-word-two-spellings-one-redirect</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-45/2026/11/06/same-word-two-spellings-one-redirect.html"><![CDATA[<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Malayalam:wght@400;500;700&amp;display=swap" rel="stylesheet" />
 
 <div class="lang-toggle" role="group" aria-label="Language">
   <button type="button" class="lang-btn active" data-lang="en">English</button>
