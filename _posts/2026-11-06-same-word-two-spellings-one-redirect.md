@@ -34,7 +34,7 @@ document.querySelectorAll('.lang-btn').forEach(function (btn) {
 
 <div id="lang-en" markdown="1">
 
-**TLDR:** [lalet.me/ഓർമ്മ](https://lalet.me/orma/), Malayalam, right in the address bar, redirects to [the room I built there](/2026/10/16/orma-a-room-in-koovappally.html). Getting that working meant finding out Malayalam Unicode lets you spell the same word two genuinely different ways in bytes, and a plain string match on the URL only catches one of them.
+**TLDR:** [lalet.me/ഓർമ്മ](https://lalet.me/orma/), Malayalam, right in the address bar, redirects to [the room I built there](https://lalet.me/orma/). Getting that working meant finding out Malayalam Unicode lets you spell the same word two genuinely different ways in bytes, and a plain string match on the URL only catches one of them.
 
 ## The address bar lies a little
 
@@ -73,7 +73,7 @@ Because a URL in your own language shouldn't come with an asterisk. A word meani
 
 <div id="lang-ml" markdown="1" style="display: none;">
 
-**ചുരുക്കം:** [lalet.me/ഓർമ്മ](https://lalet.me/orma/) എന്ന് മലയാളത്തിൽ തന്നെ അഡ്രസ് ബാറിൽ ടൈപ്പ് ചെയ്താൽ, [ഞാൻ ഉണ്ടാക്കിയ ആ മുറിയിലേക്ക്](/2026/10/16/orma-a-room-in-koovappally.html) എത്തും. ഇത് ശരിയാക്കാൻ നോക്കിയപ്പോഴാണ് മനസ്സിലായത്, മലയാളം യൂണികോഡിൽ ഒരേ വാക്ക് ബൈറ്റ് ലെവലിൽ രണ്ട് വിധത്തിൽ എഴുതാമെന്ന്. ഒരു സാധാരണ സ്ട്രിംഗ് മാച്ചിന് അതിലൊന്നേ പിടികിട്ടൂ.
+**ചുരുക്കം:** [lalet.me/ഓർമ്മ](https://lalet.me/orma/) എന്ന് മലയാളത്തിൽ തന്നെ അഡ്രസ് ബാറിൽ ടൈപ്പ് ചെയ്താൽ, [ഞാൻ ഉണ്ടാക്കിയ ആ മുറിയിലേക്ക്](https://lalet.me/orma/) എത്തും. ഇത് ശരിയാക്കാൻ നോക്കിയപ്പോഴാണ് മനസ്സിലായത്, മലയാളം യൂണികോഡിൽ ഒരേ വാക്ക് ബൈറ്റ് ലെവലിൽ രണ്ട് വിധത്തിൽ എഴുതാമെന്ന്. ഒരു സാധാരണ സ്ട്രിംഗ് മാച്ചിന് അതിലൊന്നേ പിടികിട്ടൂ.
 
 ## അഡ്രസ് ബാർ അൽപ്പം നുണ പറയും
 
