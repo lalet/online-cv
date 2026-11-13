@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-45/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-45/" rel="alternate" type="text/html" /><updated>2026-11-12T23:59:48+00:00</updated><id>https://lalet.me/pr-preview/pr-45/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">I upgraded every layer of the homelab and mostly nothing went down</title><link href="https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack.html" rel="alternate" type="text/html" title="I upgraded every layer of the homelab and mostly nothing went down" /><published>2026-11-12T00:00:00+00:00</published><updated>2026-11-12T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack.html"><![CDATA[<p>A few days, every layer, one rule: nothing goes offline that I didn’t plan to take offline. Here is what I upgraded, what broke, and what I changed so it won’t break again.</p>
+<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/2005/Atom" ><generator uri="https://jekyllrb.com/" version="3.10.0">Jekyll</generator><link href="https://lalet.me/pr-preview/pr-45/feed.xml" rel="self" type="application/atom+xml" /><link href="https://lalet.me/pr-preview/pr-45/" rel="alternate" type="text/html" /><updated>2026-11-13T00:10:57+00:00</updated><id>https://lalet.me/pr-preview/pr-45/feed.xml</id><title type="html">Lalet Scaria</title><subtitle>Staff Engineer (Platform/Reliability) — notes on cloud platforms, Kubernetes, and reliability.</subtitle><author><name>Lalet Scaria</name></author><entry><title type="html">I upgraded every layer of the homelab and mostly nothing went down</title><link href="https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack.html" rel="alternate" type="text/html" title="I upgraded every layer of the homelab and mostly nothing went down" /><published>2026-11-12T00:00:00+00:00</published><updated>2026-11-12T00:00:00+00:00</updated><id>https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack</id><content type="html" xml:base="https://lalet.me/pr-preview/pr-45/2026/11/12/upgrading-the-whole-stack.html"><![CDATA[<p>A few days, every layer, one rule: nothing goes offline that I didn’t plan to take offline. Here is what I upgraded, what broke, and what I changed so it won’t break again.</p>
 
 <h2 id="what-got-upgraded">What got upgraded</h2>
 
@@ -83,6 +83,113 @@
   <li>Check what’s on the node, not just what the tool reports. Several “done” messages were wrong until I looked.</li>
 </ul>
 
+<h2 id="notes-you-can-reuse">Notes you can reuse</h2>
+
+<p>If you run a similar setup, these are the bits I would copy.</p>
+
+<h3 id="before-you-start">Before you start</h3>
+
+<ul>
+  <li>Take an etcd snapshot and copy it off the cluster: <code class="language-plaintext highlighter-rouge">talosctl -n &lt;control-plane&gt; etcd snapshot etcd.snapshot</code>.</li>
+  <li>Check which deprecated APIs are still being called. The API server tracks it for you, so no extra tool is needed: <code class="language-plaintext highlighter-rouge">kubectl get --raw /metrics | grep apiserver_requested_deprecated_apis</code>.</li>
+  <li>List every volume with only one copy. Each one will block a drain.</li>
+  <li>Note where your database primary runs. Move it before you touch that node. With CloudNativePG that is <code class="language-plaintext highlighter-rouge">kubectl cnpg promote &lt;cluster&gt; &lt;instance&gt;</code>.</li>
+  <li>Read the release notes for one version jump at a time, not the whole range at once.</li>
+</ul>
+
+<h3 id="talos">Talos</h3>
+
+<ul>
+  <li>Upgrade the OS node by node, using your own Image Factory schematic so extensions survive: <code class="language-plaintext highlighter-rouge">talosctl -n &lt;node&gt; upgrade --image factory.talos.dev/metal-installer/&lt;schematic-id&gt;:v1.14.2</code>.</li>
+  <li>Upgrade Kubernetes separately, one minor at a time: <code class="language-plaintext highlighter-rouge">talosctl -n &lt;control-plane&gt; upgrade-k8s --to 1.36.5</code>. It restarts kubelets in place. Nodes don’t reboot.</li>
+  <li>Before applying any config, dry run it on every node: <code class="language-plaintext highlighter-rouge">talosctl -n &lt;node&gt; apply-config -f node.yaml --mode no-reboot --dry-run</code>. Only apply when the diff shows exactly what you expect.</li>
+  <li>Keep your config generator boring. A script around <code class="language-plaintext highlighter-rouge">talosctl gen config</code> with patches per node is easy to read a year later.</li>
+</ul>
+
+<h3 id="postgres-on-kubernetes">Postgres on Kubernetes</h3>
+
+<p>Add this to the CloudNativePG <code class="language-plaintext highlighter-rouge">Cluster</code> spec. It replaces the operator defaults, so the defaults are restated here:</p>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">podSecurityContext</span><span class="pi">:</span>
+  <span class="na">runAsUser</span><span class="pi">:</span> <span class="m">26</span>
+  <span class="na">runAsGroup</span><span class="pi">:</span> <span class="m">26</span>
+  <span class="na">runAsNonRoot</span><span class="pi">:</span> <span class="no">true</span>
+  <span class="na">fsGroup</span><span class="pi">:</span> <span class="m">26</span>
+  <span class="na">fsGroupChangePolicy</span><span class="pi">:</span> <span class="s">OnRootMismatch</span>
+  <span class="na">seccompProfile</span><span class="pi">:</span>
+    <span class="na">type</span><span class="pi">:</span> <span class="s">RuntimeDefault</span>
+</code></pre></div></div>
+
+<h3 id="longhorn">Longhorn</h3>
+
+<ul>
+  <li>Put Longhorn on a real data disk, not the OS disk. Even 100 GB of SSD beats a crowded system disk.</li>
+  <li>Keep 2 replicas, and make sure they land on different physical hosts, not just different VMs.</li>
+  <li>These Helm values saved me the most pain:</li>
+</ul>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">defaultSettings</span><span class="pi">:</span>
+  <span class="na">nodeDrainPolicy</span><span class="pi">:</span> <span class="s">block-for-eviction-if-contains-last-replica</span>
+  <span class="na">orphanResourceAutoDeletion</span><span class="pi">:</span> <span class="s">replica-data;instance</span>
+  <span class="na">removeSnapshotsDuringFilesystemTrim</span><span class="pi">:</span> <span class="no">true</span>
+</code></pre></div></div>
+
+<ul>
+  <li>Add a weekly trim job so deleted files inside volumes actually free space:</li>
+</ul>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">longhorn.io/v1beta2</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">RecurringJob</span>
+<span class="na">metadata</span><span class="pi">:</span>
+  <span class="na">name</span><span class="pi">:</span> <span class="s">weekly-trim</span>
+  <span class="na">namespace</span><span class="pi">:</span> <span class="s">longhorn-system</span>
+<span class="na">spec</span><span class="pi">:</span>
+  <span class="na">task</span><span class="pi">:</span> <span class="s">filesystem-trim</span>
+  <span class="na">cron</span><span class="pi">:</span> <span class="s2">"</span><span class="s">0</span><span class="nv"> </span><span class="s">4</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">*</span><span class="nv"> </span><span class="s">0"</span>
+  <span class="na">groups</span><span class="pi">:</span> <span class="pi">[</span><span class="nv">default</span><span class="pi">]</span>
+  <span class="na">retain</span><span class="pi">:</span> <span class="m">0</span>
+  <span class="na">concurrency</span><span class="pi">:</span> <span class="m">1</span>
+</code></pre></div></div>
+
+<ul>
+  <li>Moving a replica to another disk on the same node works. Set <code class="language-plaintext highlighter-rouge">evictionRequested: true</code> on the old disk and wait.</li>
+</ul>
+
+<h3 id="proxmox-with-terraform">Proxmox with Terraform</h3>
+
+<p>In the <a href="https://registry.terraform.io/providers/bpg/proxmox/latest/docs">bpg Proxmox provider</a>, these are the settings I changed on every VM:</p>
+
+<div class="language-hcl highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="nx">reboot_after_update</span> <span class="err">=</span> <span class="kc">false</span>   <span class="c1"># never let an apply reboot VMs for you</span>
+
+<span class="nx">disk</span> <span class="p">{</span>
+  <span class="nx">datastore_id</span> <span class="p">=</span> <span class="s2">"local-lvm"</span>
+  <span class="nx">interface</span>    <span class="p">=</span> <span class="s2">"scsi0"</span>
+  <span class="nx">discard</span>      <span class="p">=</span> <span class="s2">"on"</span>         <span class="c1"># lets freed space go back to the thin pool</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+<ul>
+  <li>On the guest side, Talos can trim on a schedule. Talos 1.14 only accepts the interval:</li>
+</ul>
+
+<div class="language-yaml highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="na">apiVersion</span><span class="pi">:</span> <span class="s">v1alpha1</span>
+<span class="na">kind</span><span class="pi">:</span> <span class="s">FilesystemTrimConfig</span>
+<span class="na">interval</span><span class="pi">:</span> <span class="s">168h0m0s</span>
+</code></pre></div></div>
+
+<ul>
+  <li>If your VMs mount an install ISO, put <code class="language-plaintext highlighter-rouge">create_before_destroy = true</code> on the ISO download resource. The new ISO is then attached before the old one is deleted.</li>
+  <li>Changed a VM setting that needs a power cycle? Shut the VM down from inside, then let Terraform start it again. A reboot from inside the guest won’t apply pending Proxmox changes.</li>
+  <li>Patch the hosts one at a time. Keep the etcd members spread so one host down still leaves a majority. My third control plane is a Raspberry Pi for exactly this reason.</li>
+</ul>
+
+<h3 id="anything-with-object-storage">Anything with object storage</h3>
+
+<ul>
+  <li>Find out what depends on your S3 store before maintenance. For me that was logs and database backups.</li>
+  <li>If the S3 store sits on one node’s local disk, put it on replicated storage instead. It only took one 5 GiB volume.</li>
+</ul>
+
 <h2 id="what-id-do-next-time">What I’d do next time</h2>
 
 <ul>
@@ -119,7 +226,7 @@ document.querySelectorAll('.lang-btn').forEach(function (btn) {
 
 <div id="lang-en">
 
-  <p><strong>TLDR:</strong> <a href="https://lalet.me/orma/">lalet.me/ഓർമ്മ</a>, Malayalam, right in the address bar, redirects to <a href="/2026/10/16/orma-a-room-in-koovappally.html">the room I built there</a>. Getting that working meant finding out Malayalam Unicode lets you spell the same word two genuinely different ways in bytes, and a plain string match on the URL only catches one of them.</p>
+  <p><strong>TLDR:</strong> <a href="https://lalet.me/orma/">lalet.me/ഓർമ്മ</a>, Malayalam, right in the address bar, redirects to <a href="https://lalet.me/orma/">the room I built there</a>. Getting that working meant finding out Malayalam Unicode lets you spell the same word two genuinely different ways in bytes, and a plain string match on the URL only catches one of them.</p>
 
   <h2 id="the-address-bar-lies-a-little">The address bar lies a little</h2>
 
@@ -159,7 +266,7 @@ curl <span class="nt">-I</span> <span class="nt">--path-as-is</span> <span class
 
 <div id="lang-ml" style="display: none;">
 
-  <p><strong>ചുരുക്കം:</strong> <a href="https://lalet.me/orma/">lalet.me/ഓർമ്മ</a> എന്ന് മലയാളത്തിൽ തന്നെ അഡ്രസ് ബാറിൽ ടൈപ്പ് ചെയ്താൽ, <a href="/2026/10/16/orma-a-room-in-koovappally.html">ഞാൻ ഉണ്ടാക്കിയ ആ മുറിയിലേക്ക്</a> എത്തും. ഇത് ശരിയാക്കാൻ നോക്കിയപ്പോഴാണ് മനസ്സിലായത്, മലയാളം യൂണികോഡിൽ ഒരേ വാക്ക് ബൈറ്റ് ലെവലിൽ രണ്ട് വിധത്തിൽ എഴുതാമെന്ന്. ഒരു സാധാരണ സ്ട്രിംഗ് മാച്ചിന് അതിലൊന്നേ പിടികിട്ടൂ.</p>
+  <p><strong>ചുരുക്കം:</strong> <a href="https://lalet.me/orma/">lalet.me/ഓർമ്മ</a> എന്ന് മലയാളത്തിൽ തന്നെ അഡ്രസ് ബാറിൽ ടൈപ്പ് ചെയ്താൽ, <a href="https://lalet.me/orma/">ഞാൻ ഉണ്ടാക്കിയ ആ മുറിയിലേക്ക്</a> എത്തും. ഇത് ശരിയാക്കാൻ നോക്കിയപ്പോഴാണ് മനസ്സിലായത്, മലയാളം യൂണികോഡിൽ ഒരേ വാക്ക് ബൈറ്റ് ലെവലിൽ രണ്ട് വിധത്തിൽ എഴുതാമെന്ന്. ഒരു സാധാരണ സ്ട്രിംഗ് മാച്ചിന് അതിലൊന്നേ പിടികിട്ടൂ.</p>
 
   <h2 id="section">അഡ്രസ് ബാർ അൽപ്പം നുണ പറയും</h2>
 
