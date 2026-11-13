@@ -74,6 +74,102 @@ A few days, every layer, one rule: nothing goes offline that I didn't plan to ta
 - Keep a rollback for every step. I saved each node's live config first and checked it restored cleanly.
 - Check what's on the node, not just what the tool reports. Several "done" messages were wrong until I looked.
 
+## Notes you can reuse
+
+If you run a similar setup, these are the bits I would copy.
+
+### Before you start
+
+- Take an etcd snapshot and copy it off the cluster: `talosctl -n <control-plane> etcd snapshot etcd.snapshot`.
+- Check which deprecated APIs are still being called. The API server tracks it for you, so no extra tool is needed: `kubectl get --raw /metrics | grep apiserver_requested_deprecated_apis`.
+- List every volume with only one copy. Each one will block a drain.
+- Note where your database primary runs. Move it before you touch that node. With CloudNativePG that is `kubectl cnpg promote <cluster> <instance>`.
+- Read the release notes for one version jump at a time, not the whole range at once.
+
+### Talos
+
+- Upgrade the OS node by node, using your own Image Factory schematic so extensions survive: `talosctl -n <node> upgrade --image factory.talos.dev/metal-installer/<schematic-id>:v1.14.2`.
+- Upgrade Kubernetes separately, one minor at a time: `talosctl -n <control-plane> upgrade-k8s --to 1.36.5`. It restarts kubelets in place. Nodes don't reboot.
+- Before applying any config, dry run it on every node: `talosctl -n <node> apply-config -f node.yaml --mode no-reboot --dry-run`. Only apply when the diff shows exactly what you expect.
+- Keep your config generator boring. A script around `talosctl gen config` with patches per node is easy to read a year later.
+
+### Postgres on Kubernetes
+
+Add this to the CloudNativePG `Cluster` spec. It replaces the operator defaults, so the defaults are restated here:
+
+```yaml
+podSecurityContext:
+  runAsUser: 26
+  runAsGroup: 26
+  runAsNonRoot: true
+  fsGroup: 26
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+```
+
+### Longhorn
+
+- Put Longhorn on a real data disk, not the OS disk. Even 100 GB of SSD beats a crowded system disk.
+- Keep 2 replicas, and make sure they land on different physical hosts, not just different VMs.
+- These Helm values saved me the most pain:
+
+```yaml
+defaultSettings:
+  nodeDrainPolicy: block-for-eviction-if-contains-last-replica
+  orphanResourceAutoDeletion: replica-data;instance
+  removeSnapshotsDuringFilesystemTrim: true
+```
+
+- Add a weekly trim job so deleted files inside volumes actually free space:
+
+```yaml
+apiVersion: longhorn.io/v1beta2
+kind: RecurringJob
+metadata:
+  name: weekly-trim
+  namespace: longhorn-system
+spec:
+  task: filesystem-trim
+  cron: "0 4 * * 0"
+  groups: [default]
+  retain: 0
+  concurrency: 1
+```
+
+- Moving a replica to another disk on the same node works. Set `evictionRequested: true` on the old disk and wait.
+
+### Proxmox with Terraform
+
+In the [bpg Proxmox provider](https://registry.terraform.io/providers/bpg/proxmox/latest/docs), these are the settings I changed on every VM:
+
+```hcl
+reboot_after_update = false   # never let an apply reboot VMs for you
+
+disk {
+  datastore_id = "local-lvm"
+  interface    = "scsi0"
+  discard      = "on"         # lets freed space go back to the thin pool
+}
+```
+
+- On the guest side, Talos can trim on a schedule. Talos 1.14 only accepts the interval:
+
+```yaml
+apiVersion: v1alpha1
+kind: FilesystemTrimConfig
+interval: 168h0m0s
+```
+
+- If your VMs mount an install ISO, put `create_before_destroy = true` on the ISO download resource. The new ISO is then attached before the old one is deleted.
+- Changed a VM setting that needs a power cycle? Shut the VM down from inside, then let Terraform start it again. A reboot from inside the guest won't apply pending Proxmox changes.
+- Patch the hosts one at a time. Keep the etcd members spread so one host down still leaves a majority. My third control plane is a Raspberry Pi for exactly this reason.
+
+### Anything with object storage
+
+- Find out what depends on your S3 store before maintenance. For me that was logs and database backups.
+- If the S3 store sits on one node's local disk, put it on replicated storage instead. It only took one 5 GiB volume.
+
 ## What I'd do next time
 
 - Buy a proper router. The whole LAN depends on the ISP's box. If a new ISP hands out a different address range, every node address breaks. With my own router and the ISP box in bridge mode, switching ISPs is just a cable swap.
