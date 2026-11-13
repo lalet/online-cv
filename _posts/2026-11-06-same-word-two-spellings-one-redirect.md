@@ -34,7 +34,7 @@ document.querySelectorAll('.lang-btn').forEach(function (btn) {
 
 <div id="lang-en" markdown="1">
 
-**TLDR:** [lalet.me/ഓർമ്മ](https://lalet.me/orma/), Malayalam, right in the address bar, redirects to [the room I built there](/2026/10/16/orma-a-room-in-koovappally.html). Getting that working meant finding out Malayalam Unicode lets you spell the same word two genuinely different ways in bytes, and a plain string match on the URL only catches one of them.
+**TLDR:** [lalet.me/ഓർമ്മ](https://lalet.me/orma/), Malayalam, right in the address bar, redirects to [the room I built there](https://lalet.me/orma/). Getting that working meant finding out Malayalam Unicode lets you spell the same word two genuinely different ways in bytes, and a plain string match on the URL only catches one of them.
 
 ## The address bar lies a little
 
