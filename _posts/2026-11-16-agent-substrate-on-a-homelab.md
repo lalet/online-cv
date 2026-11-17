@@ -5,7 +5,7 @@ date: 2026-11-16
 tags: [agent-substrate, kagent, kubernetes, talos, gvisor, ai-agents, selfhosted]
 ---
 
-**TLDR:** Google's [Agent Substrate](https://github.com/agent-substrate/substrate) v1.0.0 runs on my Talos homelab. A sandboxed agent slept in 1.2 s and answered its first call after waking in 0.33 s with its state intact. An LLM agent used an API key it never held. kagent 1.0 runs a Claude coding agent on top. It took three beta feature gates, two tuned workers, and plain manifests in place of the official installer.
+**TLDR:** Google's [Agent Substrate](https://github.com/agent-substrate/substrate) v1.0.0 runs on my Talos homelab. A sandboxed agent slept in 1.2 s and answered its first call after waking in 0.33 s with its state intact. An LLM agent used an API key it never held. kagent 1.0 runs a Claude coding agent on top. It took three beta feature gates, two tuned workers, and plain manifests in place of the official installer. In later tests twelve actors woke at a p50 of 0.38 s and the egress allow-list held. I also found two gaps: a lost worker needs a manual revert, and `kubectl ate proxy` skips Substrate's per-team access checks.
 
 ## The two pieces
 
@@ -116,6 +116,18 @@ kagent's Substrate page shows the whole runtime, including the actors I made by 
 
 Because kagent agents are Kubernetes objects, ArgoCD manages them, which raw Substrate templates can't offer.
 
+### Five more checks
+
+| Check | Result |
+|---|---|
+| Call a host that isn't on the allow-list | Blocked. Denied hostnames don't even resolve, and TLS to a raw IP gets dropped. With no egress policy at all, every host is denied. |
+| Suspend 12 actors on 4 workers, then wake them all | Wake p50 0.38 s, max 0.57 s, state intact. Each worker fits two actors, so 4 of the 12 failed at once with `ResourceExhausted: no worker has room`. Wake requests don't queue. |
+| Delete a worker pod mid-session | The actor went to CRASHED and stayed there. `kubectl ate revert` restored it from the last snapshot in 0.52 s. Everything after that snapshot was lost, on the volume too. |
+| Two teams in two atespaces | The API held. Team A couldn't list, wake, suspend or delete team B's actors, or borrow B's credential. But `kubectl ate proxy` reached B's actor with A's token, and even with a junk token. The proxy runs over a Kubernetes port-forward, so port-forward RBAC on `ate-system` controls it, not Substrate's access policy. |
+| Look for the model key inside kagent's sandbox | It isn't there. `ANTHROPIC_API_KEY` holds a placeholder, and the gateway adds the real key only to requests for `api.anthropic.com`. |
+
+I'd fix the proxy gap first: lock down port-forward on `ate-system` before a second team gets access.
+
 ## Pros
 
 - Idle agents don't hold memory, and waking is fast enough that nobody notices.
@@ -130,17 +142,16 @@ Because kagent agents are Kubernetes objects, ArgoCD manages them, which raw Sub
 - Raw Substrate templates and actors aren't CRDs, so plain GitOps doesn't cover them.
 - Sandbox workers run with `SYS_ADMIN` and `NET_ADMIN`. Give them dedicated nodes.
 - The bundled credential provider can read Secrets in any namespace. Narrow it first.
+- `kubectl ate proxy` bypasses atespace access policy. Restrict port-forward RBAC.
+- A lost worker leaves its actors crashed until someone runs `revert`, and work since the last snapshot is gone.
+- When workers are full, wakes fail instead of waiting.
 - No automatic suspend yet, and open connections drop when an agent sleeps.
 - No GPU passthrough.
 - Built for thousands of agents. With a handful, 14 pods is a lot of overhead.
 
 ## Not tested yet
 
-- Whether a call to a non-allowed host actually fails
-- Density and wake time with hundreds of actors
-- Losing a worker mid-session
-- Two-team isolation
-- Whether kagent keeps the model key out of the sandbox
+Hundreds of actors. Twelve is a long way from the scale Substrate is built for.
 
 ## Where it fits
 
